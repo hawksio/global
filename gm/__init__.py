@@ -162,8 +162,8 @@ def _ensure_dev_admin(app):
     from .auth import create_workspace
     from .db import query
     from .sandbox import seed
-    if query("SELECT 1 FROM users WHERE email = 'admin@gm.test'", one=True):
-        return
+    if query("SELECT 1 FROM users LIMIT 1", one=True):
+        return  # only ever on a brand-new, empty database
     password = secrets.token_urlsafe(12)
     ws_id, uid = create_workspace("Global Marketing Demo", "admin@gm.test", "Demo Administrator",
                                   generate_password_hash(password), verified=True, superadmin=True)
@@ -241,6 +241,13 @@ def _register_cli(app):
         """Add clearly labelled fictional sample data to a workspace."""
         from .sandbox import seed
         click.echo("Sample data added." if seed(workspace_id) else "This workspace already has sample data.")
+
+    @app.cli.command("remove-sample-data")
+    @click.option("--workspace-id", type=int, required=True)
+    def remove_sample_data(workspace_id):
+        """Delete the practice samples (fictional contacts, sample email and campaign) from a workspace."""
+        from .sandbox import remove
+        click.echo(f"Removed: {remove(workspace_id)}")
 
     @app.cli.command("update-disposable")
     def update_disposable():

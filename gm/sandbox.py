@@ -57,3 +57,32 @@ def seed(workspace_id, user_id=None):
              "<p>Hi {{first_name|there}},</p><p>Just following up on my last note. Is this worth a short conversation?</p>"
              "<p>Best regards,<br>{{sender_name}}</p>"))
     return True
+
+
+def remove(workspace_id):
+    """Delete everything seed() created (and only that). Returns a count of what was removed."""
+    from .db import scalar, transaction
+    counts = {}
+    with transaction():
+        sample_campaigns = [r["id"] for r in query("SELECT id FROM campaigns WHERE workspace_id = ? AND name LIKE '[Sample]%'",
+                                                    (workspace_id,))]
+        for cid in sample_campaigns:
+            execute("DELETE FROM messages WHERE campaign_id = ?", (cid,))
+            execute("DELETE FROM campaigns WHERE id = ?", (cid,))
+        counts["campaigns"] = len(sample_campaigns)
+        sample_contacts = [r["id"] for r in query("SELECT id FROM contacts WHERE workspace_id = ? AND sandbox = 1", (workspace_id,))]
+        for cid in sample_contacts:
+            execute("DELETE FROM messages WHERE contact_id = ?", (cid,))
+            execute("DELETE FROM contacts WHERE id = ?", (cid,))
+        counts["contacts"] = len(sample_contacts)
+        counts["templates"] = scalar("SELECT COUNT(*) FROM templates WHERE workspace_id = ? AND name LIKE '[Sample]%'", (workspace_id,))
+        execute("DELETE FROM templates WHERE workspace_id = ? AND name LIKE '[Sample]%'", (workspace_id,))
+        execute("DELETE FROM tags WHERE workspace_id = ? AND name = 'sample' AND id NOT IN (SELECT tag_id FROM contact_tags)",
+                (workspace_id,))
+        execute("UPDATE workspaces SET name = CASE WHEN name = 'Global Marketing Demo' THEN 'Global Marketing' ELSE name END, "
+                "company_name = CASE WHEN company_name = 'Global Marketing Demo' THEN '' ELSE company_name END, "
+                "sender_name = CASE WHEN sender_name = 'Global Marketing Demo' THEN '' ELSE sender_name END, "
+                "company_address = CASE WHEN company_address LIKE '[Sample]%' THEN '' ELSE company_address END, "
+                "sender_email = CASE WHEN sender_email = 'sender@example.com' THEN '' ELSE sender_email END WHERE id = ?",
+                (workspace_id,))
+    return counts

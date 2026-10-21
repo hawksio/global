@@ -19,6 +19,9 @@
   <div class="field"><label for="sender_email">Sender email</label><input id="sender_email" type="email" name="sender_email" value="{{ ws.sender_email }}"><div class="help">Must use a domain verified in Resend.</div></div>
   <div class="field"><label for="reply_to">Reply-to</label><input id="reply_to" type="email" name="reply_to" value="{{ ws.reply_to }}"></div>
   <button class="btn primary" type="submit">Save</button></form>
+{% if samples %}<form method="post" class="card" data-confirm="Delete the practice samples? Only the fictional sample contacts, sample email and sample campaign are removed.">{{ csrf() }}<input type="hidden" name="section" value="remove_samples">
+  <h2>Practice samples</h2><p>Your workspace still contains the fictional sample contacts, email and campaign. Remove them when you're ready to use your own.</p>
+  <button class="btn danger" type="submit">Remove practice samples</button></form>{% endif %}
 <details class="more card"><summary>Advanced: sending limits, safety and data retention</summary>
 <p class="muted">The defaults are safe for most businesses. Change them only if you know you need to.</p>
 <form method="post">{{ csrf() }}<input type="hidden" name="section" value="limits">

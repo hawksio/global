@@ -67,12 +67,21 @@ def index():
                     "complaint_pause_pct = ?, four_eyes_approval = ?, email_login_codes = ? WHERE id = ?",
                     (*values.values(), bounce, complaint, int(f.get("four_eyes_approval") == "on"),
                      int(f.get("email_login_codes") == "on"), ws["id"]))
+        elif section == "remove_samples":
+            from .sandbox import remove
+            n = remove(ws["id"])
+            audit("settings.samples_removed", detail=str(n))
+            flash(f"Practice samples removed: {n['contacts']} contacts, {n['templates']} saved emails, {n['campaigns']} "
+                  "campaigns. Your own data was not touched.", "success")
+            return redirect(url_for("settings.index"))
         else:
             abort(400)
         audit(f"settings.{section}")
         flash("Settings saved.", "success")
         return redirect(url_for("settings.index"))
-    return render_template("settings/index.html", ws=ws)
+    from .db import scalar
+    samples = scalar("SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND sandbox = 1", (ws["id"],)) +         scalar("SELECT COUNT(*) FROM campaigns WHERE workspace_id = ? AND name LIKE '[Sample]%'", (ws["id"],))
+    return render_template("settings/index.html", ws=ws, samples=samples)
 
 
 @bp.route("/integrations", methods=["GET", "POST"])

@@ -520,3 +520,81 @@ class ResendAdapter(AppCase):
             self.assertIsNone(resend.api_key, "the module-level key is cleared after each call")
         finally:
             resend.Emails.send = orig
+
+
+class SendNow(AppCase):
+    def test_send_now_practice_run(self):
+        from gm.db import execute, query
+        self.contact("a@good.test")
+        cid = self.campaign(dry_run=1)
+        execute("UPDATE campaigns SET status = 'draft' WHERE id = ?", (cid,))
+        self.login()
+        r = self.post(f"/campaigns/{cid}/send-now")
+        self.assertEqual(r.status_code, 302)
+        c = query("SELECT * FROM campaigns WHERE id = ?", (cid,), one=True)
+        self.assertEqual(c["status"], "scheduled")
+        self.assertEqual(c["approved_by"], self.owner_id, "clicking Send now is recorded as the approval")
+        self.run_jobs()
+        self.assertEqual(query("SELECT status FROM messages WHERE campaign_id = ?", (cid,), one=True)["status"], "simulated")
+
+    def test_send_now_real_still_requires_safety_checks(self):
+        from gm.db import execute, now, query
+        live(self)
+        self.contact("a@good.test")
+        cid = self.campaign()
+        execute("UPDATE campaigns SET status = 'draft' WHERE id = ?", (cid,))
+        self.login()
+        self.post(f"/campaigns/{cid}/send-now")
+        self.assertEqual(query("SELECT status FROM campaigns WHERE id = ?", (cid,), one=True)["status"], "draft",
+                         "blocked: no test email and no domain check yet")
+        execute("UPDATE campaigns SET test_sent_at = ? WHERE id = ?", (now(), cid))
+        execute("INSERT INTO dns_checks (workspace_id, domain, results, score, checked_at) VALUES (?, 'sender.test', ?, 90, ?)",
+                (self.ws_id, '{"dkim": {"status": "pass"}}', now()))
+        self.post(f"/campaigns/{cid}/send-now")
+        self.run_jobs()
+        self.assertEqual(len(self.provider.sent), 1)
+        self.assertEqual(query("SELECT status FROM messages WHERE campaign_id = ?", (cid,), one=True)["status"], "accepted")
+
+    def test_marketer_cannot_send_now_and_four_eyes_respected(self):
+        from gm.db import execute, query
+        self.contact("a@good.test")
+        cid = self.campaign(dry_run=1)
+        execute("UPDATE campaigns SET status = 'draft' WHERE id = ?", (cid,))
+        self.add_user("m@acme.test", "marketer")
+        m = self.app.test_client()
+        self.login("m@acme.test", client=m)
+        self.assertEqual(self.post(f"/campaigns/{cid}/send-now", client=m).status_code, 403)
+        execute("UPDATE workspaces SET four_eyes_approval = 1")
+        self.login()
+        self.post(f"/campaigns/{cid}/send-now")
+        self.assertEqual(query("SELECT status FROM campaigns WHERE id = ?", (cid,), one=True)["status"], "draft")
+
+    def test_send_later(self):
+        from gm.db import execute, query
+        self.contact("a@good.test")
+        cid = self.campaign(dry_run=1)
+        execute("UPDATE campaigns SET status = 'draft' WHERE id = ?", (cid,))
+        self.login()
+        self.post(f"/campaigns/{cid}/send-later", {"scheduled_at": "2099-01-01T09:00"})
+        c = query("SELECT * FROM campaigns WHERE id = ?", (cid,), one=True)
+        self.assertEqual((c["status"], c["scheduled_at"]), ("scheduled", "2099-01-01 09:00:00"))
+        self.run_jobs()
+        self.assertIsNone(query("SELECT 1 FROM messages WHERE campaign_id = ?", (cid,), one=True), "nothing before the start time")
+
+
+class Samples(AppCase):
+    def test_remove_samples_keeps_own_data(self):
+        from gm.db import query, scalar
+        from gm.sandbox import seed
+        seed(self.ws_id, self.owner_id)
+        mine = self.contact("real@good.test")
+        own_campaign = self.campaign(name="My campaign")
+        self.login()
+        self.assertIn("Remove practice samples", self.client.get("/settings/").get_data(as_text=True))
+        self.post("/settings/", {"section": "remove_samples"})
+        self.assertEqual(scalar("SELECT COUNT(*) FROM contacts WHERE sandbox = 1"), 0)
+        self.assertEqual(scalar("SELECT COUNT(*) FROM templates WHERE name LIKE '[Sample]%'"), 0)
+        self.assertEqual(scalar("SELECT COUNT(*) FROM campaigns WHERE name LIKE '[Sample]%'"), 0)
+        self.assertIsNotNone(query("SELECT 1 FROM contacts WHERE id = ?", (mine,), one=True))
+        self.assertIsNotNone(query("SELECT 1 FROM campaigns WHERE id = ?", (own_campaign,), one=True))
+        self.assertNotIn("Remove practice samples", self.client.get("/settings/").get_data(as_text=True))

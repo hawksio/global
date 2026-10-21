@@ -29,13 +29,19 @@
     {% if can('edit_campaigns') %}<form method="post" action="{{ url_for('campaigns.test', campaign_id=c.id) }}">{{ csrf() }}<label for="to">Send test emails to</label>
       <div class="actions"><select id="to" name="to">{% for e in team %}<option {% if e == current_user().email %}selected{% endif %}>{{ e }}</option>{% endfor %}</select><button class="btn" type="submit">Send test</button></div></form>{% endif %}
     <div>
-      {% if c.status == 'draft' and can('edit_campaigns') %}<form method="post" action="{{ url_for('campaigns.submit', campaign_id=c.id) }}">{{ csrf() }}<button class="btn primary" type="submit" {% if items|selectattr('blocking')|list %}disabled title="Resolve the items marked ✕ first"{% endif %}>Ask for approval</button></form>{% endif %}
-      {% if c.status == 'pending_approval' %}{% if can('approve_campaigns') %}<form method="post" action="{{ url_for('campaigns.approve', campaign_id=c.id) }}">{{ csrf() }}<button class="btn primary" type="submit">Approve campaign</button></form>
-        <form method="post" action="{{ url_for('campaigns.reject', campaign_id=c.id) }}" class="mt">{{ csrf() }}<button class="btn" type="submit">Send back to draft</button></form>{% else %}<p class="muted">Waiting for an owner or administrator to approve.</p>{% endif %}{% endif %}
+      {% set blocked = items|selectattr('blocking')|list %}
+      {% if can('approve_campaigns') and not (workspace().four_eyes_approval and c.created_by == current_user().id) %}
+      <form method="post" action="{{ url_for('campaigns.send_now', campaign_id=c.id) }}" data-confirm="{{ ('Send now? Real emails will go to ' ~ report.eligible|length ~ ' people. This can be paused but sent emails cannot be taken back.') if real else ('Start the practice run now? Nothing will be sent.') }}">{{ csrf() }}
+        <button class="btn primary" type="submit" style="font-size:1rem;padding:10px 18px" {% if blocked %}disabled title="Fix the items marked ✕ first"{% endif %}>{{ '▶ Send now' if real else '▶ Start practice run now' }}</button>
+        <p class="muted" style="margin-top:6px"><small>{% if blocked %}Fix the items marked ✕ above first.{% else %}To {{ report.eligible|length }} people. Clicking this is your approval.{% endif %}</small></p>
+      </form>
+      {% elif c.status == 'draft' and can('edit_campaigns') %}<form method="post" action="{{ url_for('campaigns.submit', campaign_id=c.id) }}">{{ csrf() }}<button class="btn primary" type="submit" {% if items|selectattr('blocking')|list %}disabled title="Resolve the items marked ✕ first"{% endif %}>Ask for approval</button></form>{% endif %}
+      {% if c.status == 'pending_approval' and not can('approve_campaigns') %}<p class="muted">Waiting for an owner or administrator to send it.</p>{% endif %}
     </div>
-    {% if c.status == 'approved' and can('approve_campaigns') %}<form method="post" action="{{ url_for('campaigns.launch', campaign_id=c.id) }}" data-confirm="{{ 'Start this campaign? Real emails will be sent to ' ~ report.eligible|length ~ ' recipients.' if real else 'Start the simulation? Nothing will be sent.' }}">{{ csrf() }}
-      <label for="when">Start at ({{ c.timezone }}, optional)</label><input id="when" type="datetime-local" name="scheduled_at">
-      <button class="btn primary mt" type="submit">{{ 'Schedule / start sending' if real else 'Start simulation' }}</button></form>{% endif %}
+    {% if can('approve_campaigns') and not blocked %}<details class="more"><summary>Send later instead</summary>
+      <form method="post" action="{{ url_for('campaigns.send_later', campaign_id=c.id) }}">{{ csrf() }}
+      <label for="when">Start at ({{ c.timezone }})</label><input id="when" type="datetime-local" name="scheduled_at" required>
+      <button class="btn mt" type="submit">Schedule</button></form></details>{% endif %}
   </div>
 </section>
 {% endif %}

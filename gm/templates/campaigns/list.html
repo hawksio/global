@@ -2,7 +2,7 @@
 {% block title %}{{ 'Follow-up sequences' if sequences else 'Campaigns' }}{% endblock %}
 {% block content %}
 <div class="page-head"><div><h1>{{ 'Follow-up sequences' if sequences else 'Campaigns' }}</h1>
-  <p>{% if sequences %}Campaigns with automatic follow-ups. Follow-ups stop on reply, unsubscribe, bounce, complaint or suppression.{% else %}Draft → checklist → approval → schedule → monitor.{% endif %}</p></div>
+  <p>{% if sequences %}Campaigns with automatic follow-ups. Follow-ups stop on reply, unsubscribe, bounce, complaint or suppression.{% else %}Create a campaign, check the list on its page, then press Send now.{% endif %}</p></div>
   {% if can('edit_campaigns') %}<a class="btn primary" href="{{ url_for('campaigns.edit') }}">New campaign</a>{% endif %}</div>
 {% if not sequences %}<nav class="tabs"><a href="{{ url_for('campaigns.index') }}" {% if not status %}aria-current="page"{% endif %}>All</a>{% for k, v in STATUS_LABELS.items() %}<a href="{{ url_for('campaigns.index', status=k) }}" {% if status == k %}aria-current="page"{% endif %}>{{ v }}</a>{% endfor %}</nav>{% endif %}
 {% if campaigns %}

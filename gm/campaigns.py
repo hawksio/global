@@ -507,6 +507,48 @@ def launch(campaign_id):
     return redirect(url_for("campaigns.detail", campaign_id=c["id"]))
 
 
+@bp.route("/<int:campaign_id>/send-now", methods=["POST"])
+@bp.route("/<int:campaign_id>/send-later", methods=["POST"], endpoint="send_later")
+@require("approve_campaigns")
+def send_now(campaign_id):
+    """One click for owners and admins: approve and start immediately. The same safety checks still apply,
+    and clicking it is the human approval (recorded in the activity log)."""
+    c = get_campaign(campaign_id)
+    ws = workspace()
+    if c["status"] not in EDITABLE:
+        abort(409)
+    if ws["four_eyes_approval"] and c["created_by"] == current_user()["id"]:
+        flash("Your settings say a second person must approve campaigns, so ask a colleague to approve this one.", "error")
+        return redirect(url_for("campaigns.detail", campaign_id=c["id"]))
+    items, _ = readiness(ws, c)
+    blocking = [i["label"] for i in items if i["blocking"]]
+    if blocking:
+        flash("Not ready to send yet: " + "; ".join(blocking), "error")
+        return redirect(url_for("campaigns.detail", campaign_id=c["id"]))
+    start_at = now()
+    if request.form.get("scheduled_at"):
+        try:
+            local = datetime.fromisoformat(request.form["scheduled_at"]).replace(tzinfo=ZoneInfo(c["timezone"]))
+        except ValueError:
+            flash("Enter a valid date and time.", "error")
+            return redirect(url_for("campaigns.detail", campaign_id=c["id"]))
+        if local.astimezone(timezone.utc) > datetime.now(timezone.utc):
+            start_at = fmt_ts(local)
+    execute("UPDATE campaigns SET status = 'approved', approved_by = ?, approved_at = ?, updated_at = ? WHERE id = ?",
+            (current_user()["id"], now(), now(), c["id"]))
+    audit("campaign.approved", target=c["id"], detail="send now: " + ("practice run" if c["dry_run"] else "real sending"))
+    c = get_campaign(campaign_id)
+    n = launch_campaign(c, ws, start_at)
+    audit("campaign.launched", target=c["id"], detail=f"{n} recipients, start {start_at} UTC")
+    jobs.enqueue("send_campaigns", dedupe_key="send_campaigns")
+    practice = c["dry_run"] or ws["sandbox_mode"]
+    later = start_at > now()
+    flash(f"{'Scheduled' if later else 'Started'} for {n} recipients." + (" Practice run: nothing is really sent." if practice else
+          (f" Sending starts {start_at} UTC." if later else " The first emails go out within a minute (inside your sending hours).")),
+          "success")
+    return redirect(url_for("campaigns.detail", campaign_id=c["id"]))
+
+
 @bp.route("/<int:campaign_id>/pause", methods=["POST"])
 @require("edit_campaigns")
 def pause(campaign_id):
