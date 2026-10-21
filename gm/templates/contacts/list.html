@@ -4,9 +4,8 @@
 <div class="page-head">
   <div><h1>Contacts</h1><p>{{ '{:,}'.format(total) }} {{ 'match your filters' if filters else 'in total' }}</p></div>
   <div class="actions">
-    <a class="btn" href="{{ url_for('suppression.index') }}">Suppression list</a>
     {% if can('export_contacts') %}<a class="btn" href="{{ url_for('contacts.export', **filters) }}">Export CSV</a>{% endif %}
-    {% if can('edit_contacts') %}<a class="btn" href="{{ url_for('contacts.import_upload') }}">Import CSV</a><a class="btn primary" href="{{ url_for('contacts.new') }}">Add contact</a>{% endif %}
+    {% if can('edit_contacts') %}<a class="btn primary" href="{{ url_for('contacts.new') }}">Add contact</a>{% endif %}
   </div>
 </div>
 {% if not any_contacts %}
@@ -14,13 +13,15 @@
 {% else %}
 <form class="toolbar card" method="get" aria-label="Filter contacts">
   <div class="field" style="flex:2"><label for="q">Search</label><input id="q" type="search" name="q" value="{{ filters.q }}" placeholder="Email, name or company"></div>
+  <div class="field"><label for="f-tag">Tag</label><select id="f-tag" name="tag"><option value="">Any</option>{% for t in all_tags %}<option {% if filters.tag == t.name %}selected{% endif %}>{{ t.name }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="f-v">Email check</label><select id="f-v" name="verification_status"><option value="">Any</option>{% for k, v in VERIFICATION.items() %}<option value="{{ k }}" {% if filters.verification_status == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="f-s">Status</label><select id="f-s" name="status"><option value="">Any</option>{% for k, v in STATUSES.items() %}<option value="{{ k }}" {% if filters.status == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+  <details class="more" style="flex-basis:100%"{% if filters.domain or filters.country or filters.industry or filters.source %} open{% endif %}><summary>More filters</summary><div class="row">
   <div class="field"><label for="f-domain">Domain</label><input id="f-domain" type="text" name="domain" value="{{ filters.domain }}"></div>
   <div class="field"><label for="f-country">Country</label><input id="f-country" type="text" name="country" value="{{ filters.country }}"></div>
   <div class="field"><label for="f-industry">Industry</label><input id="f-industry" type="text" name="industry" value="{{ filters.industry }}"></div>
-  <div class="field"><label for="f-tag">Tag</label><select id="f-tag" name="tag"><option value="">Any</option>{% for t in all_tags %}<option {% if filters.tag == t.name %}selected{% endif %}>{{ t.name }}</option>{% endfor %}</select></div>
-  <div class="field"><label for="f-v">Verification</label><select id="f-v" name="verification_status"><option value="">Any</option>{% for k, v in VERIFICATION.items() %}<option value="{{ k }}" {% if filters.verification_status == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
-  <div class="field"><label for="f-s">Status</label><select id="f-s" name="status"><option value="">Any</option>{% for k, v in STATUSES.items() %}<option value="{{ k }}" {% if filters.status == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
   <div class="field"><label for="f-src">Source</label><select id="f-src" name="source"><option value="">Any</option>{% for k, v in SOURCES.items() %}<option value="{{ k }}" {% if filters.source == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+  </div></details>
   <div class="actions"><button class="btn primary" type="submit">Filter</button>{% if filters %}<a class="btn" href="{{ url_for('contacts.index') }}">Clear</a>{% endif %}</div>
 </form>
 <form method="post" action="{{ url_for('contacts.bulk') }}">
@@ -30,17 +31,17 @@
     <input type="text" name="tag" placeholder="Tag name" aria-label="Tag name" style="max-width:160px">
     <button class="btn small" name="action" value="tag">Add tag</button>
     <button class="btn small" name="action" value="untag">Remove tag</button>
-    {% if can('verify') %}<button class="btn small" name="action" value="verify">Re-check</button>{% endif %}
+    {% if can('verify') %}<button class="btn small" name="action" value="verify">Check again</button>{% endif %}
     <button class="btn small" name="action" value="set_business">Mark business</button>
     {% if can('export_contacts') %}<button class="btn small" name="action" value="export">Export</button>{% endif %}
-    <button class="btn small" name="action" value="suppress" data-confirm="Add the selected addresses to the suppression list? They will never receive marketing email.">Suppress</button>
+    <button class="btn small" name="action" value="suppress" data-confirm="Add the selected addresses to the do-not-email list? They will never receive marketing email.">Suppress</button>
     {% if can('delete_contacts') %}<button class="btn small danger" name="action" value="delete" data-confirm="Permanently delete the selected contacts?">Delete</button>{% endif %}
   </div>
   <div class="table-wrap"><table data-bulk="bulk">
     {% set args = filters %}
     <thead><tr><th><input type="checkbox" data-select-all aria-label="Select all on this page"></th>
       <th>{{ sort_link('Email', 'email', sort, dir, args) }}</th><th>{{ sort_link('Name', 'name', sort, dir, args) }}</th>
-      <th>{{ sort_link('Company', 'company', sort, dir, args) }}</th><th>{{ sort_link('Verification', 'status', sort, dir, args) }}</th>
+      <th>{{ sort_link('Company', 'company', sort, dir, args) }}</th><th>{{ sort_link('Email check', 'status', sort, dir, args) }}</th>
       <th>Status</th><th>Source</th><th>Tags</th><th>{{ sort_link('Added', 'created', sort, dir, args) }}</th></tr></thead>
     <tbody>
     {% for c in contacts %}

@@ -39,15 +39,16 @@ HEADER_GUESSES = {
     "tags": ["tags", "tag", "labels", "segment"],
     "source_url": ["source", "source url", "source page"],
 }
-VERIFICATION = {"unverified": "Not checked", "validated": "Validated", "invalid": "Invalid", "risky": "Risky",
-                "unknown": "Unknown", "suppressed": "Suppressed"}
-STATUSES = {"active": "Active", "unsubscribed": "Unsubscribed", "bounced": "Bounced", "complained": "Complained",
-            "suppressed": "Suppressed"}
-LAWFUL_BASES = {"consent": "Consent (opted in)", "legitimate_interest": "Legitimate interest (B2B)",
-                "existing_customer": "Existing customer", "unknown": "Not recorded"}
-RECIPIENT_TYPES = {"business": "Business address", "consumer": "Individual / consumer", "unknown": "Not known"}
-SOURCES = {"manual": "Added manually", "import": "CSV import", "discovery": "Contact discovery", "api": "API",
-           "sandbox": "Sandbox sample"}
+# Labels shown to people. The keys are stored in the database and never change.
+VERIFICATION = {"unverified": "Not checked yet", "validated": "Looks good", "invalid": "Bad address", "risky": "Check first",
+                "unknown": "Couldn't check", "suppressed": "Do not email"}
+STATUSES = {"active": "Active", "unsubscribed": "Unsubscribed", "bounced": "Email bounced", "complained": "Reported as spam",
+            "suppressed": "Do not email"}
+LAWFUL_BASES = {"consent": "They agreed to hear from us", "legitimate_interest": "Business contact (relevant to their job)",
+                "existing_customer": "Existing customer", "unknown": "Not sure / not recorded"}
+RECIPIENT_TYPES = {"business": "A business address", "consumer": "A private person", "unknown": "Not sure"}
+SOURCES = {"manual": "Added by hand", "import": "Imported file", "discovery": "Found on a website", "api": "API",
+           "sandbox": "Practice sample"}
 SORTS = {"created": "c.created_at", "email": "c.email_normalized", "company": "c.company", "domain": "c.domain",
          "status": "c.verification_status", "name": "c.last_name"}
 PAGE_SIZE = 50

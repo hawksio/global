@@ -2,8 +2,7 @@
 {% block title %}Team{% endblock %}
 {% block content %}
 {% set me = current_user() %}
-<div class="page-head"><div><h1>Administration</h1><p>Team members and roles.</p></div><a class="btn" href="{{ url_for('admin.audit_log') }}">Audit log</a></div>
-<nav class="tabs"><a href="{{ url_for('admin.team') }}" aria-current="page">Team</a><a href="{{ url_for('admin.audit_log') }}">Audit log</a></nav>
+<div class="page-head"><div><h1>Team</h1><p>Who can use this workspace, and what they can do.</p></div></div>
 <div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Two-step</th><th>Last sign-in</th><th>Actions</th></tr></thead><tbody>
 {% for u in users %}<tr><td>{{ u.full_name }}{% if u.id == me.id %} <span class="badge info">you</span>{% endif %}</td><td>{{ u.email }}</td><td>{{ ROLES[u.role] }}</td>
   <td>{% if not u.is_active %}<span class="badge bad">Deactivated</span>{% elif not u.last_login_at and not u.email_verified_at %}<span class="badge warn">Invited</span>{% else %}<span class="badge ok">Active</span>{% endif %}</td>

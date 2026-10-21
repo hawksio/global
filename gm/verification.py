@@ -197,7 +197,7 @@ CLEAN_GROUPS = {
     "disposable": ("Disposable domains", "c.is_disposable = 1"),
     "role": ("Role-based addresses", "c.is_role = 1"),
     "suppressed": ("Suppressed / unsubscribed / bounced", "c.status != 'active'"),
-    "no_basis": ("No lawful basis recorded", "c.lawful_basis = 'unknown'"),
+    "no_basis": ("No permission to email recorded", "c.lawful_basis = 'unknown'"),
 }
 
 

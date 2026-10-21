@@ -390,7 +390,7 @@ def review(job_id):
         purpose = request.form.get("purpose", "").strip()
         basis, rtype = request.form.get("lawful_basis"), request.form.get("recipient_type")
         if not purpose or basis not in LAWFUL_BASES or rtype not in RECIPIENT_TYPES:
-            flash("Record the purpose, recipient type and lawful basis before adding contacts.", "error")
+            flash("Say why you're adding these contacts, what kind of address they are, and your permission to email them.", "error")
             return redirect(url_for("discovery.run", job_id=job_id))
         tag = request.form.get("tag", "").strip()
         added = 0

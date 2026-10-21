@@ -1,9 +1,9 @@
 {% extends "base.html" %}{% from "_ui.html" import csrf, check_mark %}
-{% block title %}Deliverability Centre{% endblock %}
+{% block title %}Email health page{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Deliverability Centre</h1><p>Sender authentication, sender health and automatic safety limits. A good score means your setup is right; it can't guarantee inbox placement.</p></div></div>
+<div class="page-head"><div><h1>Email health page</h1><p>Sender authentication, sender health and automatic safety limits. A good score means your setup is right; it can't guarantee inbox placement.</p></div></div>
 {% if ws.sending_paused_reason %}<section class="notice bad"><p><strong>Sending is paused for this workspace.</strong> {{ ws.sending_paused_reason }}</p>
-  <p>Recommended: check recent bounces and complaints in Analytics, remove or re-verify the affected addresses, confirm recipients expect your email, then resume.</p>
+  <p>Recommended: check recent bounces and complaints in Results, remove or re-verify the affected addresses, confirm recipients expect your email, then resume.</p>
   {% if can('manage_settings') %}<form method="post" action="{{ url_for('deliverability.resume_sending') }}">{{ csrf() }}<label class="check"><input type="checkbox" name="confirm"> I've investigated the cause and fixed it</label><button class="btn" type="submit">Resume sending</button></form>{% endif %}</section>{% endif %}
 <div class="grid cols-2">
 <section class="card"><h2>Check your sending domain</h2>
@@ -27,7 +27,7 @@
     <tr><td>Permanent failures</td><td class="num">{{ h.failed }} ({{ h.failure_pct }}%)</td></tr>
     <tr><td>Messages needing retries</td><td class="num">{{ h.retried }} ({{ h.retry_pct }}%)</td></tr>
     <tr><td>Webhook events received</td><td class="num">{{ h.webhook_events }}{% if not h.webhook_events %} <span class="badge warn">set up the webhook</span>{% endif %}</td></tr>
-    <tr><td>Addresses on the suppression list</td><td class="num">{{ h.suppression_total }}</td></tr>
+    <tr><td>Addresses on the do-not-email list</td><td class="num">{{ h.suppression_total }}</td></tr>
   </tbody></table>
   {% if h.daily %}<h3 class="mt">Volume, last 14 days</h3>{% set mx = h.daily|map(attribute='n')|max %}
     {% for d in h.daily %}<div class="row" style="align-items:center;gap:8px"><small class="mono" style="width:90px">{{ d.day }}</small><div class="bar" style="flex:1"><span style="width:{{ (100 * d.n / mx)|int }}%;background:var(--brand)"></span></div><small style="width:40px" class="right">{{ d.n }}</small></div>{% endfor %}{% endif %}

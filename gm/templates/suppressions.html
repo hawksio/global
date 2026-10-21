@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% from "_ui.html" import csrf, pager %}
-{% block title %}Suppression list{% endblock %}
+{% block title %}Do-not-email list{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Suppression list</h1><p>{{ '{:,}'.format(total) }} addresses that will never receive marketing email. Checked immediately before every send.</p></div>
+<div class="page-head"><div><h1>Do-not-email list</h1><p>{{ '{:,}'.format(total) }} addresses that will never receive marketing email. Checked immediately before every send.</p></div>
   <div class="actions">{% if can('export_contacts') %}<a class="btn" href="{{ url_for('suppression.export') }}">Export CSV</a>{% endif %}<a class="btn" href="{{ url_for('contacts.index') }}">Back to contacts</a></div></div>
 <div class="grid cols-4">{% for k, v in REASONS.items() %}<div class="stat"><div class="label">{{ v }}</div><div class="value">{{ counts.get(k, 0) }}</div></div>{% endfor %}</div>
 <div class="grid cols-2 mt">
@@ -17,8 +17,8 @@
 </div>
 <div class="table-wrap"><table><thead><tr><th>Address</th><th>Reason</th><th>Source</th><th>Added (UTC)</th><th></th></tr></thead><tbody>
 {% for r in rows %}<tr><td>{{ r.email_normalized }}{% if r.simulated %} <span class="badge sim">simulated</span>{% endif %}</td><td><span class="badge {{ 'bad' if r.reason in ('complaint', 'hard_bounce') else 'warn' }}">{{ REASONS[r.reason] }}</span></td><td><small>{{ r.source }}</small></td><td><small>{{ r.created_at|dt }}</small></td>
-  <td>{% if can('manage_settings') %}<form method="post" action="{{ url_for('suppression.remove') }}" data-confirm="Remove {{ r.email_normalized }} from the suppression list? Only do this if the person clearly asked to hear from you again.">{{ csrf() }}<input type="hidden" name="email" value="{{ r.email_normalized }}"><input type="hidden" name="confirm" value="yes"><button class="btn small" type="submit">Remove</button></form>{% endif %}</td></tr>
-{% else %}<tr><td colspan="5" class="muted">The suppression list is empty.</td></tr>{% endfor %}
+  <td>{% if can('manage_settings') %}<form method="post" action="{{ url_for('suppression.remove') }}" data-confirm="Remove {{ r.email_normalized }} from the do-not-email list? Only do this if the person clearly asked to hear from you again.">{{ csrf() }}<input type="hidden" name="email" value="{{ r.email_normalized }}"><input type="hidden" name="confirm" value="yes"><button class="btn small" type="submit">Remove</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">The do-not-email list is empty.</td></tr>{% endfor %}
 </tbody></table></div>
 {{ pager(page, pages, 'suppression.index', {'q': q, 'reason': reason}) }}
 {% endblock %}

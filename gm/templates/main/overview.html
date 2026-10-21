@@ -1,59 +1,50 @@
-{% extends "base.html" %}{% from "_ui.html" import csrf, job_progress, jbadge %}
-{% block title %}Overview{% endblock %}
+{% extends "base.html" %}{% from "_ui.html" import job_progress %}
+{% block title %}Home{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div><h1>Overview</h1><p>{{ ws.name }} · everything below comes from your own records.</p></div>
-  <div class="actions">
-    {% if can('edit_contacts') %}<a class="btn" href="{{ url_for('contacts.import_upload') }}">Import contacts</a>{% endif %}
-    {% if can('edit_campaigns') %}<a class="btn primary" href="{{ url_for('campaigns.edit') }}">New campaign</a>{% endif %}
-  </div>
-</div>
-{% if ws.sending_paused_reason %}<div class="notice bad"><strong>Sending is paused.</strong> {{ ws.sending_paused_reason }} <a href="{{ url_for('deliverability.index') }}">Review in the Deliverability Centre</a>.</div>{% endif %}
-{% if ws.sandbox_mode %}<div class="notice sim"><strong>Sandbox mode is on.</strong> Campaigns and tests are simulated and written to the local outbox; nothing reaches real inboxes.{% if stats.sandbox_contacts %} {{ stats.sandbox_contacts }} fictional sample contacts are tagged “sample”.{% endif %}</div>{% endif %}
+{% set next_step = steps|rejectattr('done')|first %}
+<div class="page-head"><div><h1>Hello, {{ current_user().full_name.split(' ')[0] }}</h1><p>What would you like to do?</p></div></div>
 
-{% if steps_done < steps|length %}
-<section class="card">
-  <h2>Getting started · {{ steps_done }} of {{ steps|length }} done</h2>
-  <div class="progress" aria-hidden="true"><span style="width: {{ (100 * steps_done / steps|length)|int }}%"></span></div>
-  <ul class="checklist mt">
-    {% for s in steps %}<li><span class="mark {{ 'ok' if s.done else '' }}">{{ '✓' if s.done else loop.index }}</span>
-      <div><a href="{{ s.url }}"><strong>{{ s.label }}</strong></a><br><small>{{ s.help }}</small></div></li>{% endfor %}
-  </ul>
+{% if ws.sending_paused_reason %}<div class="notice bad"><strong>Sending is paused.</strong> {{ ws.sending_paused_reason }} <a href="{{ url_for('deliverability.index') }}">See what to do</a>.</div>{% endif %}
+{% if ws.sandbox_mode %}<div class="notice sim"><strong>You're in practice mode.</strong> You can try everything; no email reaches anyone until you connect your email service in Settings → Connections.</div>{% endif %}
+
+<div class="grid cols-3 big-actions">
+  {% if can('edit_contacts') %}<a class="action" href="{{ url_for('contacts.import_upload') }}"><span class="icon" aria-hidden="true">👥</span><strong>Add contacts</strong><span class="muted">Upload a spreadsheet (CSV), add people one by one, or find addresses on company websites.</span></a>{% endif %}
+  {% if can('edit_templates') %}<a class="action" href="{{ url_for('ai.index') if can('use_ai') else url_for('templates.new') }}"><span class="icon" aria-hidden="true">✉</span><strong>Write an email</strong><span class="muted">Get a first draft from the writing assistant, then edit and save it.</span></a>{% endif %}
+  {% if can('edit_campaigns') %}<a class="action" href="{{ url_for('campaigns.edit') }}"><span class="icon" aria-hidden="true">📣</span><strong>Send a campaign</strong><span class="muted">Choose who gets it and which email. It starts as a practice run, so nothing is sent by mistake.</span></a>{% endif %}
+</div>
+
+{% if next_step %}
+<section class="card mt">
+  <h2>Next step to finish setting up ({{ steps_done }} of {{ steps|length }} done)</h2>
+  <p><a class="btn primary" href="{{ next_step.url }}">{{ next_step.label }}</a></p>
+  <p class="muted">{{ next_step.help }}</p>
+  <details class="more"><summary>Show all setup steps</summary>
+    <ul class="checklist">{% for s in steps %}<li><span class="mark {{ 'ok' if s.done else '' }}">{{ '✓' if s.done else loop.index }}</span><div><a href="{{ s.url }}">{{ s.label }}</a></div></li>{% endfor %}</ul>
+  </details>
 </section>
 {% endif %}
 
-<div class="grid cols-4">
-  <div class="stat"><a href="{{ url_for('contacts.index') }}"><div class="label">Contacts</div><div class="value">{{ '{:,}'.format(stats.contacts) }}</div>
-    <div class="hint">{{ '{:,}'.format(stats.eligible_hint) }} validated with a lawful basis</div></a></div>
-  <div class="stat"><a href="{{ url_for('verification.cleaning') }}"><div class="label">Need checking</div><div class="value">{{ '{:,}'.format(stats.needs_check) }}</div>
-    <div class="hint">{{ stats.review }} risky addresses to review</div></a></div>
-  <div class="stat"><a href="{{ url_for('discovery.index') }}"><div class="label">Discovery results to review</div><div class="value">{{ stats.pending_discovery }}</div>
-    <div class="hint">Published addresses waiting for your decision</div></a></div>
-  <div class="stat"><a href="{{ url_for('campaigns.index') }}"><div class="label">Campaigns</div><div class="value">{{ stats.sending }}</div>
-    <div class="hint">scheduled or sending · {{ stats.awaiting_approval }} awaiting approval</div></a></div>
-</div>
-
+{% set todo = [] %}
+{% if stats.awaiting_approval and can('approve_campaigns') %}{% set _ = todo.append((stats.awaiting_approval ~ ' campaign(s) waiting for your approval', url_for('campaigns.index', status='pending_approval'))) %}{% endif %}
+{% if stats.pending_discovery %}{% set _ = todo.append((stats.pending_discovery ~ ' addresses found on websites to review', url_for('discovery.index'))) %}{% endif %}
+{% if stats.review %}{% set _ = todo.append((stats.review ~ ' contacts marked “Check first”', url_for('contacts.index', verification_status='risky'))) %}{% endif %}
+{% if stats.needs_check %}{% set _ = todo.append((stats.needs_check ~ ' contacts not checked yet', url_for('verification.cleaning'))) %}{% endif %}
 <div class="grid cols-2 mt">
   <section class="card">
-    <h2>Sender health · last 30 days (real email only)</h2>
-    {% if h.sent %}
-    <dl class="kv">
-      <dt>Accepted by the provider</dt><dd>{{ h.sent }}</dd>
-      <dt>Delivered to recipient servers</dt><dd>{{ h.delivered }}{% if not h.webhook_events %} <span class="badge warn">no webhook events received</span>{% endif %}</dd>
-      <dt>Hard bounce rate</dt><dd>{{ h.bounce_pct }}%</dd>
-      <dt>Complaint rate</dt><dd>{{ h.complaint_pct }}%</dd>
-      <dt>Unsubscribes</dt><dd>{{ h.unsubscribes }}</dd>
-    </dl>
-    {% else %}<p class="muted">No real marketing email sent yet. Simulated sends are kept separate and don't appear here.</p>{% endif %}
-    <p class="mt"><a href="{{ url_for('deliverability.index') }}">Open the Deliverability Centre →</a></p>
+    <h2>Needs your attention</h2>
+    {% for text, url in todo %}<p><a href="{{ url }}">{{ text }} →</a></p>{% else %}<p class="muted">Nothing right now. 🎉</p>{% endfor %}
+    {% for j in active_jobs %}<div class="mt"><strong>Working on: {{ {'import_contacts': 'importing contacts', 'verify_csv': 'checking a file', 'verify_contacts': 'checking contacts', 'discover': 'searching websites', 'send_campaigns': 'sending emails', 'retention': 'tidying old data'}.get(j.kind, j.kind) }}</strong>{{ job_progress(j, reload=False) }}</div>{% endfor %}
   </section>
   <section class="card">
-    <h2>Background work</h2>
-    {% for j in active_jobs %}<div style="margin-bottom:12px"><strong>{{ j.kind.replace('_', ' ')|capitalize }}</strong> {{ jbadge(j.status) }}{{ job_progress(j, reload=False) }}</div>
-    {% else %}<p class="muted">Nothing running. Imports, verification, discovery and sending run in the background, so you can keep working.</p>{% endfor %}
-    <h3 class="mt">Recent campaigns</h3>
-    {% for c in campaigns %}<p><a href="{{ url_for('campaigns.detail', campaign_id=c.id) }}">{{ c.name }}</a> <span class="badge">{{ c.status.replace('_', ' ') }}</span>{% if c.dry_run %} <span class="badge sim">simulation</span>{% endif %}</p>
-    {% else %}<p class="muted">No campaigns yet.</p>{% endfor %}
+    <h2>At a glance</h2>
+    <dl class="kv">
+      <dt>Contacts</dt><dd><a href="{{ url_for('contacts.index') }}">{{ '{:,}'.format(stats.contacts) }}</a> ({{ '{:,}'.format(stats.eligible_hint) }} ready to email)</dd>
+      <dt>Campaigns sending</dt><dd><a href="{{ url_for('campaigns.index') }}">{{ stats.sending }}</a></dd>
+      <dt>Emails sent (30 days)</dt><dd>{{ h.sent }}{% if h.sent %} · {{ h.bounce_pct }}% bounced · {{ h.complaint_pct }}% spam reports{% endif %}</dd>
+      <dt>Do-not-email list</dt><dd><a href="{{ url_for('suppression.index') }}">{{ stats.suppressed }}</a></dd>
+    </dl>
+    {% if campaigns %}<h3 class="mt">Recent campaigns</h3>
+    {% for c in campaigns %}<p><a href="{{ url_for('campaigns.detail', campaign_id=c.id) }}">{{ c.name }}</a> <span class="badge">{{ c.status.replace('_', ' ') }}</span>{% if c.dry_run %} <span class="badge sim">practice</span>{% endif %}</p>{% endfor %}{% endif %}
   </section>
 </div>
 {% endblock %}

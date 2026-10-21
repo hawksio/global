@@ -5,9 +5,9 @@
   <div><h1>{{ c.first_name }} {{ c.last_name }} {% if not c.first_name and not c.last_name %}{{ c.email }}{% endif %}</h1>
     <p>{{ c.email }} {{ vbadge(c.verification_status) }} {{ sbadge(c.status) }}{% if c.sandbox %} <span class="badge sim">sandbox sample</span>{% endif %}</p></div>
   <div class="actions">
-    {% if can('verify') %}<form method="post" action="{{ url_for('contacts.verify_one', contact_id=c.id) }}">{{ csrf() }}<button class="btn" type="submit">Re-check now</button></form>{% endif %}
+    {% if can('verify') %}<form method="post" action="{{ url_for('contacts.verify_one', contact_id=c.id) }}">{{ csrf() }}<button class="btn" type="submit">Check again now</button></form>{% endif %}
     {% if can('edit_contacts') %}<a class="btn" href="{{ url_for('contacts.edit', contact_id=c.id) }}">Edit</a>
-      {% if suppressed %}{% if can('manage_settings') %}<form method="post" action="{{ url_for('contacts.suppress', contact_id=c.id) }}" data-confirm="Remove from the suppression list? Only do this if the person asked to hear from you again.">{{ csrf() }}<input type="hidden" name="action" value="remove"><button class="btn" type="submit">Unsuppress</button></form>{% endif %}
+      {% if suppressed %}{% if can('manage_settings') %}<form method="post" action="{{ url_for('contacts.suppress', contact_id=c.id) }}" data-confirm="Remove from the do-not-email list? Only do this if the person asked to hear from you again.">{{ csrf() }}<input type="hidden" name="action" value="remove"><button class="btn" type="submit">Unsuppress</button></form>{% endif %}
       {% else %}<form method="post" action="{{ url_for('contacts.suppress', contact_id=c.id) }}" data-confirm="Suppress this address? It will never receive marketing email.">{{ csrf() }}<button class="btn" type="submit">Suppress</button></form>{% endif %}{% endif %}
     {% if can('delete_contacts') %}<form method="post" action="{{ url_for('contacts.delete', contact_id=c.id) }}" data-confirm="Delete this contact permanently?">{{ csrf() }}<button class="btn danger" type="submit">Delete</button></form>{% endif %}
   </div>
@@ -28,8 +28,8 @@
       <dt>Source URL</dt><dd>{% if c.source_url %}<a href="{{ c.source_url }}" rel="noopener noreferrer nofollow" target="_blank">{{ c.source_url[:80] }}</a>{% else %}—{% endif %}</dd>
       <dt>Added</dt><dd>{{ c.created_at|dt }} UTC</dd>
       <dt>Purpose</dt><dd>{{ c.purpose or '—' }}</dd>
-      <dt>Recipient type</dt><dd>{{ RECIPIENT_TYPES[c.recipient_type] }}</dd>
-      <dt>Lawful basis</dt><dd>{{ LAWFUL_BASES[c.lawful_basis] }}{% if c.consent_at %} (recorded {{ c.consent_at|dt }}){% endif %}</dd>
+      <dt>Type of address</dt><dd>{{ RECIPIENT_TYPES[c.recipient_type] }}</dd>
+      <dt>Permission to email</dt><dd>{{ LAWFUL_BASES[c.lawful_basis] }}{% if c.consent_at %} (recorded {{ c.consent_at|dt }}){% endif %}</dd>
       <dt>Marketing</dt><dd>{% if c.marketing_opt_out or suppressed %}<span class="badge bad">Do not email</span>{% if suppressed %} {{ suppressed.reason.replace('_', ' ') }} on {{ suppressed.created_at[:10] }}{% endif %}{% else %}<span class="badge ok">Allowed</span> subject to campaign rules{% endif %}</dd>
       <dt>Last contacted</dt><dd>{{ c.last_contacted_at|dt or 'Never' }}</dd>
     </dl></section>

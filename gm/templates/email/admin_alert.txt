@@ -2,4 +2,4 @@ Hi {{ name }},
 
 {{ body }}
 
-Deliverability Centre: {{ base_url }}/deliverability/
+Email health page: {{ base_url }}/deliverability/

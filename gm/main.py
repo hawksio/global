@@ -14,26 +14,26 @@ def onboarding_steps(ws):
     wid = ws["id"]
     from .security import get_secret
     return [
-        {"key": "company", "label": "Add your company details", "done": bool(ws["company_name"] and ws["company_address"]),
+        {"key": "company", "label": "Add your company name and address", "done": bool(ws["company_name"] and ws["company_address"]),
          "help": "Your company name and postal address appear in every marketing email (a legal requirement in many countries).",
          "url": url_for("main.onboarding", step="company")},
-        {"key": "sender", "label": "Set your sender identity", "done": bool(ws["sender_email"] and ws["sender_name"]),
+        {"key": "sender", "label": "Choose who your emails come from", "done": bool(ws["sender_email"] and ws["sender_name"]),
          "help": "The name and address your emails come from. Use a domain you control.",
          "url": url_for("main.onboarding", step="sender")},
-        {"key": "resend", "label": "Connect Resend (or keep the sandbox)", "done": bool(get_secret(wid, "resend_api_key")),
-         "help": "Without a Resend API key everything runs in the sandbox: nothing is really sent.",
+        {"key": "resend", "label": "Connect your email service (or keep practising)", "done": bool(get_secret(wid, "resend_api_key")),
+         "help": "Until you connect Resend, everything is a practice run and nothing is really sent.",
          "url": url_for("settings.integrations")},
-        {"key": "domain", "label": "Check your sending domain", "done": bool(scalar("SELECT 1 FROM dns_checks WHERE workspace_id = ? "
+        {"key": "domain", "label": "Check your email domain is set up", "done": bool(scalar("SELECT 1 FROM dns_checks WHERE workspace_id = ? "
                                                                                   "AND score >= 60", (wid,))),
-         "help": "SPF, DKIM and DMARC records let mailbox providers trust your email.", "url": url_for("deliverability.index")},
-        {"key": "contacts", "label": "Import or discover contacts", "done": bool(scalar("SELECT 1 FROM contacts WHERE workspace_id = ? "
+         "help": "A few DNS records let Gmail, Outlook and others trust your email.", "url": url_for("deliverability.index")},
+        {"key": "contacts", "label": "Add your contacts", "done": bool(scalar("SELECT 1 FROM contacts WHERE workspace_id = ? "
                                                                                      "AND sandbox = 0", (wid,))),
          "help": "Upload a CSV or find addresses published on company websites.", "url": url_for("contacts.import_upload")},
-        {"key": "template", "label": "Create a template", "done": bool(scalar("SELECT 1 FROM templates WHERE workspace_id = ?", (wid,))),
+        {"key": "template", "label": "Write your first email", "done": bool(scalar("SELECT 1 FROM templates WHERE workspace_id = ?", (wid,))),
          "help": "Write it yourself or let the AI assistant draft one for you to edit.", "url": url_for("templates.new")},
-        {"key": "campaign", "label": "Run your first campaign (start with a simulation)",
+        {"key": "campaign", "label": "Send your first campaign (start with a practice run)",
          "done": bool(scalar("SELECT 1 FROM campaigns WHERE workspace_id = ? AND launched_at IS NOT NULL", (wid,))),
-         "help": "Campaigns start in simulation mode so you can rehearse safely.", "url": url_for("campaigns.edit")},
+         "help": "New campaigns start as practice runs, so nothing is sent until you're ready.", "url": url_for("campaigns.edit")},
     ]
 
 

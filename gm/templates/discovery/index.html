@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% from "_ui.html" import csrf, jbadge %}
-{% block title %}Discover contacts{% endblock %}
+{% block title %}Find contacts on websites{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Discover contacts</h1><p>Find email addresses that companies publish on their own websites: contact, about, team and imprint pages.</p></div></div>
+<div class="page-head"><div><h1>Find contacts on websites</h1><p>Find email addresses that companies publish on their own websites: contact, about, team and imprint pages.</p></div></div>
 <div class="grid cols-2">
   <section class="card"><h2>New discovery run</h2>
     <form method="post" enctype="multipart/form-data">{{ csrf() }}

@@ -1,10 +1,10 @@
 {% extends "base.html" %}{% from "_ui.html" import csrf %}
-{% block title %}AI email assistant{% endblock %}
+{% block title %}Writing assistant{% endblock %}
 {% block content %}
 {% set tasks = [('draft', 'First-contact draft'), ('subjects', 'Subject lines'), ('rewrite', 'Rewrite tone'), ('proofread', 'Proofread'), ('followup', 'Follow-up'), ('variations', 'Variations'), ('check', 'Check content'), ('summarize', 'Summarise a campaign'), ('recommend', 'Recommendations')] %}
 {% set task = i.task or request.args.get('task', 'draft') %}
-<div class="page-head"><div><h1>AI email assistant</h1>
-  <p>Provider: {% if provider_name == 'anthropic' %}<span class="badge ok">Claude ({{ config.AI_MODEL }})</span> · {{ usage }} of {{ limit }} requests used this month{% elif provider_name == 'mock' %}<span class="badge sim">Sandbox mock</span>{% else %}<span class="badge">Free rule-based assistant</span> · connect an AI provider under Integrations for better drafts{% endif %}</p></div></div>
+<div class="page-head"><div><h1>Writing assistant</h1>
+  <p>Provider: {% if provider_name == 'anthropic' %}<span class="badge ok">Claude ({{ config.AI_MODEL }})</span> · {{ usage }} of {{ limit }} requests used this month{% elif provider_name == 'mock' %}<span class="badge sim">Sandbox mock</span>{% else %}<span class="badge">Free rule-based assistant</span> · connect an AI provider under Connections for better drafts{% endif %}</p></div></div>
 <div class="notice info"><p>The assistant uses only what you tell it. It won't invent facts about recipients, testimonials, results or promises; it leaves <code>[placeholders]</code> instead. Everything it writes is saved unapproved, and campaigns need a person's approval.</p></div>
 <nav class="tabs">{% for k, label in tasks %}<a href="{{ url_for('ai.index', task=k) }}" {% if task == k %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}</nav>
 <div class="grid cols-2">

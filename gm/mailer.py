@@ -51,7 +51,7 @@ class SandboxProvider:
         return SendResult(ok=True, provider_id=msg_id, simulated=True)
 
     def test_connection(self):
-        return True, "Sandbox mode: messages are written to the local outbox and never sent."
+        return True, "Practice mode: messages are written to the local outbox and never sent."
 
     def domains(self):
         return []

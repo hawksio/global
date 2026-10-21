@@ -1,8 +1,8 @@
 {% extends "base.html" %}{% from "_ui.html" import empty %}
-{% block title %}Templates{% endblock %}
+{% block title %}Saved emails{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Templates</h1><p>Reusable emails with personalisation fields, versions and approval.</p></div>
-  <div class="actions">{% if can('use_ai') %}<a class="btn" href="{{ url_for('ai.index') }}">Draft with AI</a>{% endif %}{% if can('edit_templates') %}<a class="btn primary" href="{{ url_for('templates.new') }}">New template</a>{% endif %}</div></div>
+<div class="page-head"><div><h1>Saved emails</h1><p>Reusable emails with personalisation fields, versions and approval.</p></div>
+  <div class="actions">{% if can('use_ai') %}<a class="btn" href="{{ url_for('ai.index') }}">Draft with AI</a>{% endif %}{% if can('edit_templates') %}<a class="btn primary" href="{{ url_for('templates.new') }}">New saved email</a>{% endif %}</div></div>
 <form method="get" class="toolbar"><div class="field" style="flex:1"><label for="q">Search</label><input id="q" type="search" name="q" value="{{ q }}"></div>
   <div class="field"><label for="cat">Category</label><select id="cat" name="category" data-autosubmit><option value="">All</option>{% for c in CATEGORIES %}<option {% if category == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
   <button class="btn" type="submit">Search</button><a class="btn" href="{{ url_for('templates.index', archived=1) }}">Archived</a></form>

@@ -254,7 +254,7 @@ def test(template_id):
     if status == "failed":
         flash(f"The test email could not be sent: {error}", "error")
     elif status == "simulated":
-        flash("Sandbox mode: the test was written to the local outbox, not sent. Turn off sandbox mode to send for real.", "info")
+        flash("Practice mode: the test was saved locally, not sent. Turn off practice mode in Settings → Connections to send for real.", "info")
     else:
         flash(f"Test email accepted by the sending service for {to}. Check the inbox (and spam folder).", "success")
     return redirect(url_for("templates.preview", template_id=t["id"]))

@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% from "_ui.html" import csrf %}
-{% block title %}Integrations{% endblock %}
+{% block title %}Connections{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Integrations</h1><p>Credentials are encrypted at rest, never shown again after saving, and never sent to the browser.</p></div></div>
+<div class="page-head"><div><h1>Connections</h1><p>Credentials are encrypted at rest, never shown again after saving, and never sent to the browser.</p></div></div>
 <div class="grid cols-2">
 <section class="card"><h2>Resend (email sending)</h2>
   <p>Status: {% if resend_hint %}<span class="badge ok">Key saved {{ resend_hint.hint }}</span> <small>updated {{ resend_hint.updated_at|dt }}</small>{% else %}<span class="badge">Not connected</span>{% endif %}</p>
@@ -10,9 +10,9 @@
     <button class="btn primary" type="submit">Save key</button></form>
   <form method="post" class="mt">{{ csrf() }}<input type="hidden" name="action" value="test"><button class="btn" type="submit">Test connection</button></form>
   <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
-  <h3>Sandbox mode</h3>
+  <h3>Practice mode</h3>
   <form method="post">{{ csrf() }}<input type="hidden" name="action" value="sandbox">
-    <label class="check"><input type="checkbox" name="sandbox_mode" {% if ws.sandbox_mode %}checked{% endif %}> <span>Sandbox mode: simulate everything, send nothing</span></label>
+    <label class="check"><input type="checkbox" name="sandbox_mode" {% if ws.sandbox_mode %}checked{% endif %}> <span>Practice mode: simulate everything, send nothing</span></label>
     <button class="btn" type="submit">Save</button></form>
   <p class="muted"><small>Resend's free plan has daily and monthly limits; paid plans cost more as volume grows. See resend.com/pricing.</small></p>
 </section>

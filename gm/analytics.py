@@ -69,7 +69,7 @@ def rate(n, d):
 def rule_summary(stats):
     s, rec = stats["real"], stats["recipients"]
     if not s["total"] and stats["simulated"]["total"]:
-        return (f"This campaign has only run as a simulation ({stats['simulated']['total']} simulated messages). No real "
+        return (f"This campaign has only run as a practice run ({stats['simulated']['total']} simulated messages). No real "
                 "results exist yet.")
     if not s["total"]:
         return "Nothing has been sent yet, so there is nothing to summarise."
@@ -98,7 +98,7 @@ def rule_recommendations(stats):
     if s["accepted"] and s["complaints"] / s["accepted"] > 0.001:
         tips.append("Complaints are above 0.1%: make sure recipients expect your email, and target more precisely.")
     if s["delivered"] and s["opened"] / s["delivered"] < 0.1:
-        tips.append("Opens look low (approximate): test a clearer, more specific subject line on a small segment.")
+        tips.append("Opens look low (approximate): test a clearer, more specific subject line on a small group.")
     if s["failed"]:
         tips.append(f"{s['failed']} messages failed permanently; check the error column on the campaign page.")
     if s["accepted"] < 100:

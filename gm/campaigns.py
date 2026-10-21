@@ -48,7 +48,7 @@ def eligibility(contact, include_risky=False):
     if contact["verification_status"] == "risky" and not include_risky:
         return False, "Address is risky (review it or include risky addresses deliberately)"
     if contact["lawful_basis"] == "unknown":
-        return False, "No lawful basis recorded"
+        return False, "No permission to email recorded"
     if contact["recipient_type"] == "consumer" and contact["lawful_basis"] != "consent":
         return False, "Consumer address without recorded consent"
     if contact["recipient_type"] == "unknown" and contact["lawful_basis"] == "legitimate_interest":
@@ -204,7 +204,7 @@ def edit(campaign_id=None):
                         "updated_at = ? WHERE id = ?", (*values, c["id"]))
                 cid = c["id"]
                 if content_changed:
-                    back_to_draft(c, "The audience or simulation setting changed.")
+                    back_to_draft(c, "The audience or practice-run setting changed.")
             else:
                 cid = execute("INSERT INTO campaigns (workspace_id, name, segment, from_name, from_email, reply_to, timezone, "
                               "send_window_start, send_window_end, send_days, rate_per_minute, dry_run, updated_at, "
@@ -293,33 +293,33 @@ def readiness(ws, c):
     def add(label, ok, detail, blocking=True):
         items.append({"label": label, "ok": bool(ok), "detail": detail, "blocking": blocking and not ok})
 
-    add("1. Eligible contact segment", rep["eligible"],
+    add("1. People who will receive it", rep["eligible"],
         f"{len(rep['eligible'])} of {rep['matched']} matching contacts are eligible." if rep["matched"] else
-        "No contacts match this segment.")
+        "No contacts match these choices.")
     srcs = ", ".join(f"{SOURCES.get(k, k)}: {v}" for k, v in rep["sources"].items()) or "none"
-    add("2. Sources and outreach permissions reviewed", True,
-        f"Sources: {srcs}. Every recipient has a recorded lawful basis; consumers need consent.", blocking=False)
-    add("3. List cleaned and checked", rep["unverified"] == 0,
-        f"{rep['unverified']} eligible addresses were never fully checked. Run verification first." if rep["unverified"]
+    add("2. Where these contacts came from", True,
+        f"Sources: {srcs}. Everyone included has a recorded permission to email; private people must have agreed.", blocking=False)
+    add("3. Addresses checked", rep["unverified"] == 0,
+        f"{rep['unverified']} eligible addresses were never fully checked. Use Contacts → Check emails first." if rep["unverified"]
         else "All eligible addresses have been checked.", blocking=False)
-    add("4. Suppression list applied", True,
+    add("4. Do-not-email list applied", True,
         f"{rep['excluded'].get('On the suppression list', 0)} suppressed addresses excluded; re-checked before every send.",
         blocking=False)
     errors = []
     for s in steps:
         errors += [f"{'Email 1' if s['step_no'] == 0 else 'Follow-up ' + str(s['step_no'])}: {f['title']}"
                    for f in content_check(s["subject"], s["html_body"], s["text_body"]) if f["level"] == "error"]
-    add("5. Message content passes the automatic checks", not errors, "; ".join(errors) or "No blocking problems found.")
+    add("5. Email passes the automatic checks", not errors, "; ".join(errors) or "No blocking problems found.")
     add("6. AI-generated content reviewed by a person", not c["ai_generated"] or c["content_reviewed"],
         "Tick the review box on this page after reading every email." if c["ai_generated"] and not c["content_reviewed"]
         else "Reviewed." if c["ai_generated"] else "Not AI-generated.")
-    add("7. Sender identity and postal address set", c["from_email"] and ws["company_address"],
+    add("7. Your sender email and postal address are set", c["from_email"] and ws["company_address"],
         "Set a sender email and your company's postal address in Settings." if not (c["from_email"] and ws["company_address"])
         else f"From {c['from_name']} <{c['from_email']}>.")
     real = not c["dry_run"] and not ws["sandbox_mode"]
     add("8. Test email sent", c["test_sent_at"] or not real,
         f"Test sent {c['test_sent_at']} UTC." if c["test_sent_at"] else "Send yourself a test email first." if real
-        else "Optional in simulation mode.", blocking=real)
+        else "Optional for a practice run.", blocking=real)
     if real:
         domain = c["from_email"].rsplit("@", 1)[-1] if "@" in c["from_email"] else ""
         check = latest_check(ws["id"], domain)
@@ -328,8 +328,8 @@ def readiness(ws, c):
             f"Readiness score {check['score']}/100 (checked {check['checked_at']} UTC)." if check else
             f"Run the Deliverability Centre checks for {domain or 'your domain'} first.")
     else:
-        add("9. Sending domain ready", True, "Not required in simulation mode.", blocking=False)
-    add("10. Sending not paused by safety limits", not ws["sending_paused_reason"],
+        add("9. Sending domain ready", True, "Not needed for a practice run.", blocking=False)
+    add("10. Sending isn't paused", not ws["sending_paused_reason"],
         ws["sending_paused_reason"] or f"Limits: {ws['hourly_send_limit']}/hour, {ws['daily_send_limit']}/day, "
                                        f"{c['rate_per_minute']}/minute.")
     return items, rep
@@ -500,7 +500,7 @@ def launch(campaign_id):
             start_at = fmt_ts(local)
     n = launch_campaign(c, ws, start_at)
     audit("campaign.launched", target=c["id"], detail=f"{n} recipients, start {start_at} UTC")
-    flash(f"Scheduled for {n} recipients" + (" (simulation: nothing will really be sent)." if c["dry_run"] or ws["sandbox_mode"]
+    flash(f"Scheduled for {n} recipients" + (" (practice run: nothing will really be sent)." if c["dry_run"] or ws["sandbox_mode"]
                                             else ". Sending starts within a minute of the start time, inside the sending window."),
           "success")
     jobs.enqueue("send_campaigns", dedupe_key="send_campaigns")
@@ -567,7 +567,7 @@ def duplicate(campaign_id):
         execute("INSERT INTO campaign_steps (campaign_id, step_no, delay_days, subject, preheader, html_body, text_body) "
                 "SELECT ?, step_no, delay_days, subject, preheader, html_body, text_body FROM campaign_steps WHERE campaign_id = ?",
                 (cid, c["id"]))
-    flash("Copied as a new draft (in simulation mode).", "success")
+    flash("Copied as a new draft (set as a practice run).", "success")
     return redirect(url_for("campaigns.detail", campaign_id=cid))
 
 
@@ -715,7 +715,7 @@ def process_campaign(c, ws, budget):
     simulate = bool(c["dry_run"] or ws["sandbox_mode"])
     provider = mailer.SandboxProvider() if simulate else mailer.workspace_provider(ws)
     if not simulate and provider.name == "sandbox":
-        return 0, "Real sending needs a Resend API key (Integrations) or the campaign must run as a simulation."
+        return 0, "Real sending needs a Resend API key (Integrations) or the campaign must be a practice run."
     if c["status"] == "scheduled":
         execute("UPDATE campaigns SET status = 'sending' WHERE id = ? AND status = 'scheduled'", (c["id"],))
     limit = min(budget, c["rate_per_minute"])

@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% from "_ui.html" import csrf, vbadge, check_mark, jbadge %}
-{% block title %}Email verification{% endblock %}
+{% block title %}Check emails{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Email verification</h1><p>Free local checks: syntax, normalisation, DNS mail routing, disposable and role-based domains, and your own bounce and unsubscribe history.</p></div></div>
+<div class="page-head"><div><h1>Check emails</h1><p>Free local checks: syntax, normalisation, DNS mail routing, disposable and role-based domains, and your own bounce and unsubscribe history.</p></div></div>
 <div class="notice info"><p><strong>What “validated” means:</strong> the address passed every check we ran. It does <em>not</em> prove the mailbox exists or will accept email. We never probe mail servers to guess. A specialist verification provider can give stronger (still not certain) evidence; local checks are free.</p></div>
 <div class="grid cols-2">
   <section class="card"><h2>Check one address</h2>
@@ -21,7 +21,7 @@
       <button class="btn primary" type="submit">Validate file</button></form>
     <h3 class="mt">Your contacts by result</h3>
     <div class="table-wrap"><table><tbody>{% for k, label in VERIFICATION.items() %}<tr><td>{{ vbadge(k) }}</td><td class="num">{{ stats.get(k, 0) }}</td>
-      <td class="right">{% if stats.get(k, 0) and k in ('unverified', 'unknown', 'risky', 'validated') %}<form method="post" action="{{ url_for('verification.reverify') }}">{{ csrf() }}<input type="hidden" name="status" value="{{ k }}"><button class="btn small" type="submit">Re-check</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+      <td class="right">{% if stats.get(k, 0) and k in ('unverified', 'unknown', 'risky', 'validated') %}<form method="post" action="{{ url_for('verification.reverify') }}">{{ csrf() }}<input type="hidden" name="status" value="{{ k }}"><button class="btn small" type="submit">Check again</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
   </section>
 </div>
 <section class="card"><h2>Verification jobs</h2>

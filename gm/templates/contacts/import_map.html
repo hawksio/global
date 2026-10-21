@@ -20,8 +20,8 @@
   <div class="field"><label for="source_detail">Source</label><input id="source_detail" type="text" name="source_detail" required placeholder="e.g. CRM export of existing customers, October 2026"></div>
   <div class="field"><label for="purpose">Purpose</label><input id="purpose" type="text" name="purpose" required placeholder="e.g. Product update newsletter for customers"></div>
   <div class="row">
-    <div class="field"><label for="recipient_type">Recipients are</label><select id="recipient_type" name="recipient_type">{% for k, v in RECIPIENT_TYPES.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
-    <div class="field"><label for="lawful_basis">Lawful basis</label><select id="lawful_basis" name="lawful_basis">{% for k, v in LAWFUL_BASES.items() %}<option value="{{ k }}" {% if k == 'unknown' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="recipient_type">These addresses are</label><select id="recipient_type" name="recipient_type">{% for k, v in RECIPIENT_TYPES.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="lawful_basis">Permission to email</label><select id="lawful_basis" name="lawful_basis">{% for k, v in LAWFUL_BASES.items() %}<option value="{{ k }}" {% if k == 'unknown' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
     <div class="field"><label for="tag">Tag all rows with</label><input id="tag" type="text" name="tag" placeholder="optional"></div>
   </div>
   <label class="check"><input type="checkbox" name="dns" checked> <span>Check each domain's mail routing (DNS) during the import. Free; adds a few seconds per new domain.</span></label>

@@ -107,10 +107,30 @@ class Security(AppCase):
         page = self.client.get("/").get_data(as_text=True)
         self.assertIn('data-menu-toggle', page)
         self.assertIn('aria-label="Main navigation"', page)
-        for label in ("Overview", "Contacts", "Discover Contacts", "Email Verification", "List Cleaning", "AI Email Assistant",
-                      "Templates", "Campaigns", "Follow-up Sequences", "Transactional Email", "Deliverability Centre",
-                      "Analytics", "Integrations", "Settings", "Administration"):
-            self.assertIn(label, page)
+        import re
+        sidebar = page[page.index('<ul class="nav">'):page.index("</ul>")]
+        self.assertEqual(re.findall(r"</span>([^<]+)</a>", sidebar),
+                         ["Home", "Contacts", "Emails", "Campaigns", "Reports", "Settings"])
+        # Every feature stays one click away as a tab inside its section.
+        expected = {"/contacts/": ["All contacts", "Import a file", "Find on websites", "Check emails", "Clean up list",
+                                   "Do-not-email list"],
+                    "/templates/": ["Saved emails", "Writing assistant"],
+                    "/campaigns/": ["All campaigns", "With follow-ups"],
+                    "/analytics/": ["Results", "Email health"],
+                    "/settings/": ["Company &amp; sender", "Connections", "Team", "Activity log", "Account emails",
+                                   "My security"]}
+        for url, tabs in expected.items():
+            html = self.client.get(url).get_data(as_text=True)
+            bar = html[html.index('class="tabs section-tabs"'):]
+            bar = bar[:bar.index("</nav>")]
+            self.assertEqual(re.findall(r">([^<]+)</a>", bar), tabs, url)
+        # An analyst (read only) sees fewer tabs and no Settings section.
+        self.add_user("analyst@acme.test", "analyst")
+        analyst = self.app.test_client()
+        self.login("analyst@acme.test", client=analyst)
+        html = analyst.get("/contacts/").get_data(as_text=True)
+        self.assertNotIn("Import a file", html)
+        self.assertNotIn(">Connections<", analyst.get("/").get_data(as_text=True))
 
     def test_no_secret_files_in_repo(self):
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

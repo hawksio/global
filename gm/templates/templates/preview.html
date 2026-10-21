@@ -23,7 +23,7 @@
     <form method="post" action="{{ url_for('templates.test', template_id=t.id) }}">{{ csrf() }}
       <div class="field"><label for="to">To (a team member)</label><input id="to" type="email" name="to" value="{{ current_user().email }}" required></div>
       <button class="btn" type="submit">Send test email</button>
-      <p class="muted mt"><small>Marked [TEST]. {% if workspace().sandbox_mode %}Sandbox mode: written to the outbox, not sent.{% endif %}</small></p></form></section>{% endif %}
+      <p class="muted mt"><small>Marked [TEST]. {% if workspace().sandbox_mode %}Practice mode: written to the outbox, not sent.{% endif %}</small></p></form></section>{% endif %}
 </aside>
 </div>
 {% endblock %}

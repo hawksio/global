@@ -1,8 +1,8 @@
 {% extends "base.html" %}{% from "_ui.html" import csrf %}
-{% block title %}Analytics{% endblock %}
+{% block title %}Results{% endblock %}
 {% block content %}
 {% macro metric(label, value, hint='', available=True) %}<div class="stat"><div class="label">{{ label }}</div><div class="value">{{ value if available else 'n/a' }}</div><div class="hint">{{ hint if available else 'Unavailable: no webhook events received yet' }}</div></div>{% endmacro %}
-<div class="page-head"><div><h1>Analytics</h1><p>Measured from your own records. Nothing here is estimated; unavailable metrics say so.</p></div>
+<div class="page-head"><div><h1>Results</h1><p>Measured from your own records. Nothing here is estimated; unavailable metrics say so.</p></div>
   <a class="btn" href="{{ url_for('analytics.index', format='csv', **f) }}">Download CSV report</a></div>
 <form method="get" class="toolbar card">
   <div class="field"><label for="from">From</label><input id="from" type="date" name="from" value="{{ f.get('from', '') }}"></div>

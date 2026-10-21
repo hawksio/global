@@ -101,7 +101,7 @@ def run_checks(ws, domain):
         prov = mailer.workspace_provider(ws)
         domains = prov.domains() if prov.name == "resend" else None
     if domains is None:
-        r["provider"] = {"status": "unknown", "evidence": "Sandbox mode or no Resend API key, so the provider was not asked",
+        r["provider"] = {"status": "unknown", "evidence": "Practice mode or no Resend API key, so the provider was not asked",
                          "advice": "Connect Resend under Integrations to check the domain's verification status."}
     else:
         match = next((d for d in domains if d.get("name") == domain), None)

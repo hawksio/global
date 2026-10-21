@@ -110,8 +110,9 @@ def create_app(test_config=None):
         return resp
 
     from .contacts import LAWFUL_BASES, RECIPIENT_TYPES, SOURCES, STATUSES, VERIFICATION
+    from .nav import navigation
     from .security import ROLES
-    app.jinja_env.globals.update(csrf_token=csrf_token, current_user=current_user, can=can, workspace=workspace,
+    app.jinja_env.globals.update(csrf_token=csrf_token, current_user=current_user, can=can, workspace=workspace, navigation=navigation,
                                  VERIFICATION=VERIFICATION, STATUSES=STATUSES, LAWFUL_BASES=LAWFUL_BASES,
                                  RECIPIENT_TYPES=RECIPIENT_TYPES, SOURCES=SOURCES, ROLES=ROLES,
                                  production=production, env_name=app.config["ENV_NAME"])

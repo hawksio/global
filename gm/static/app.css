@@ -55,6 +55,16 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; fo
 .nav li a:hover { background: var(--muted-bg); color: var(--ink); }
 .nav li a[aria-current="page"] { background: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand); font-weight: 600; }
 .nav .num { width: 20px; text-align: center; font-size: .75rem; color: var(--ink-3); }
+.nav li a { font-size: .98rem; padding: 10px 12px; }
+.nav-help { font-size: .8rem; margin: 18px 10px 0; }
+.section-tabs { margin-top: -6px; }
+.section-tabs a { font-weight: 500; }
+.grid.big-actions { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.big-actions .action { display: block; text-decoration: none; color: inherit; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); }
+.big-actions .action:hover { border-color: var(--brand); text-decoration: none; }
+.big-actions .action strong { display: block; font-size: 1.1rem; margin: 6px 0 4px; color: var(--brand); }
+.big-actions .icon { font-size: 1.6rem; }
+details.more > summary { cursor: pointer; font-weight: 600; color: var(--brand); margin: 6px 0 12px; }
 .nav-group { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); margin: 14px 10px 4px; }
 .main { min-width: 0; }
 .topbar { display: flex; align-items: center; gap: 12px; padding: 10px 24px; background: var(--panel);

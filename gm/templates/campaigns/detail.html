@@ -4,13 +4,13 @@
 {% set real = not c.dry_run and not workspace().sandbox_mode %}
 <div class="page-head"><div><h1>{{ c.name }}</h1>
   <p><span class="badge {{ {'sending': 'info', 'completed': 'ok', 'paused': 'warn', 'cancelled': 'bad', 'pending_approval': 'warn', 'approved': 'ok'}.get(c.status, '') }}">{{ STATUS_LABELS[c.status] }}</span>
-  {% if not real %}<span class="badge sim">simulation: nothing will be sent</span>{% else %}<span class="badge bad">real sending</span>{% endif %}
+  {% if not real %}<span class="badge sim">practice run: nothing will be sent</span>{% else %}<span class="badge bad">real sending</span>{% endif %}
   · {{ steps|length }} email{{ 's' if steps|length != 1 }} · from {{ c.from_name }} &lt;{{ c.from_email }}&gt;
   {% if creator %}· created by {{ creator.full_name }}{% endif %}{% if approver %} · approved by {{ approver.full_name }} {{ c.approved_at|dt }}{% endif %}</p>
   {% if c.pause_reason and c.status == 'paused' %}<div class="notice warn"><p>{{ c.pause_reason }}</p></div>{% endif %}</div>
   <div class="actions">
     <a class="btn" href="{{ url_for('campaigns.steps', campaign_id=c.id) }}">Emails &amp; follow-ups</a>
-    <a class="btn" href="{{ url_for('campaigns.dry_run', campaign_id=c.id) }}">Dry run report</a>
+    <a class="btn" href="{{ url_for('campaigns.dry_run', campaign_id=c.id) }}">Preview who gets it</a>
     {% if can('edit_campaigns') %}
       {% if c.status in ('draft', 'pending_approval', 'approved') %}<a class="btn" href="{{ url_for('campaigns.edit', campaign_id=c.id) }}">Settings &amp; audience</a>{% endif %}
       <form method="post" action="{{ url_for('campaigns.duplicate', campaign_id=c.id) }}">{{ csrf() }}<button class="btn" type="submit">Duplicate</button></form>
@@ -21,7 +21,7 @@
   </div></div>
 
 {% if items %}
-<section class="card"><h2>Pre-launch checklist</h2>
+<section class="card"><h2>Before you send</h2>
   <ul class="checklist">{% for it in items %}<li><span class="mark {{ 'ok' if it.ok else ('bad' if it.blocking else 'warn') }}">{{ '✓' if it.ok else ('✕' if it.blocking else '!') }}</span><div><strong>{{ it.label }}</strong><br><small>{{ it.detail }}</small></div></li>{% endfor %}</ul>
   {% if report.excluded %}<details class="mt"><summary>Why {{ report.matched - report.eligible|length }} matching contacts are excluded</summary><ul>{% for why, n in report.excluded.items() %}<li>{{ why }}: {{ n }}</li>{% endfor %}</ul></details>{% endif %}
   {% if c.ai_generated and can('edit_campaigns') %}<form method="post" action="{{ url_for('campaigns.mark_reviewed', campaign_id=c.id) }}" class="mt">{{ csrf() }}<label class="check"><input type="checkbox" name="reviewed" data-autosubmit {% if c.content_reviewed %}checked{% endif %}> <span>I have read every email in this campaign and confirm it is accurate and not misleading.</span></label></form>{% endif %}
@@ -29,7 +29,7 @@
     {% if can('edit_campaigns') %}<form method="post" action="{{ url_for('campaigns.test', campaign_id=c.id) }}">{{ csrf() }}<label for="to">Send test emails to</label>
       <div class="actions"><select id="to" name="to">{% for e in team %}<option {% if e == current_user().email %}selected{% endif %}>{{ e }}</option>{% endfor %}</select><button class="btn" type="submit">Send test</button></div></form>{% endif %}
     <div>
-      {% if c.status == 'draft' and can('edit_campaigns') %}<form method="post" action="{{ url_for('campaigns.submit', campaign_id=c.id) }}">{{ csrf() }}<button class="btn primary" type="submit" {% if items|selectattr('blocking')|list %}disabled title="Resolve the items marked ✕ first"{% endif %}>Submit for approval</button></form>{% endif %}
+      {% if c.status == 'draft' and can('edit_campaigns') %}<form method="post" action="{{ url_for('campaigns.submit', campaign_id=c.id) }}">{{ csrf() }}<button class="btn primary" type="submit" {% if items|selectattr('blocking')|list %}disabled title="Resolve the items marked ✕ first"{% endif %}>Ask for approval</button></form>{% endif %}
       {% if c.status == 'pending_approval' %}{% if can('approve_campaigns') %}<form method="post" action="{{ url_for('campaigns.approve', campaign_id=c.id) }}">{{ csrf() }}<button class="btn primary" type="submit">Approve campaign</button></form>
         <form method="post" action="{{ url_for('campaigns.reject', campaign_id=c.id) }}" class="mt">{{ csrf() }}<button class="btn" type="submit">Send back to draft</button></form>{% else %}<p class="muted">Waiting for an owner or administrator to approve.</p>{% endif %}{% endif %}
     </div>
@@ -56,7 +56,7 @@
     <td><span class="badge {{ {'active': 'info', 'completed': 'ok', 'stopped': 'warn'}.get(r.status) }}">{{ r.status }}</span>{% if r.stop_reason %}<br><small>{{ r.stop_reason }}</small>{% endif %}</td>
     <td><small>{% if r.status == 'active' %}email {{ r.next_step + 1 }} · {{ r.next_send_at|dt }}{% endif %}</small></td>
     <td>{% if not r.replied_at and can('edit_campaigns') %}<form method="post" action="{{ url_for('campaigns.mark_replied', campaign_id=c.id, recipient_id=r.id) }}">{{ csrf() }}<button class="btn small" type="submit" title="Stop follow-ups for this contact">Replied</button></form>{% elif r.replied_at %}<span class="badge ok">replied</span>{% endif %}</td></tr>
-  {% else %}<tr><td colspan="4" class="muted">Recipients are fixed when the campaign starts.</td></tr>{% endfor %}</tbody></table></div></section>
+  {% else %}<tr><td colspan="4" class="muted">These addresses are fixed when the campaign starts.</td></tr>{% endfor %}</tbody></table></div></section>
 <section class="card"><h2>Message log (latest 50)</h2>
   <div class="table-wrap"><table><thead><tr><th>To</th><th>Email</th><th>Status</th><th>Detail</th></tr></thead><tbody>
   {% for m in recent %}<tr><td><small>{{ m.to_email }}</small></td><td>{{ m.step_no + 1 }}</td><td>{{ mbadge(m.status) }}</td><td><small>{{ m.provider_id or '' }} {{ m.last_error }}{% if m.attempts > 1 %} · {{ m.attempts }} attempts{% endif %}</small></td></tr>

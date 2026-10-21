@@ -21,38 +21,13 @@
       <span>{{ ws.name if ws else 'Global Marketing' }}</span>
     </a>
     {% set ep = request.endpoint or '' %}
-    {% macro item(n, endpoint, label, active, args={}) %}
-      <li><a href="{{ url_for(endpoint, **args) }}"{% if active %} aria-current="page"{% endif %}><span class="num">{{ n }}</span>{{ label }}</a></li>
-    {% endmacro %}
-    {% if ws %}
+    {% set sections = navigation() %}
     <ul class="nav">
-      {{ item(1, 'main.overview', 'Overview', ep in ('main.overview', 'main.onboarding')) }}
-      {% if can('view_contacts') %}{{ item(2, 'contacts.index', 'Contacts', ep.startswith('contacts.') or ep.startswith('suppression.')) }}{% endif %}
-      {% if can('discover') %}{{ item(3, 'discovery.index', 'Discover Contacts', ep.startswith('discovery.')) }}{% endif %}
-      {% if can('verify') %}{{ item(4, 'verification.index', 'Email Verification', ep in ('verification.index', 'verification.job')) }}
-      {{ item(5, 'verification.cleaning', 'List Cleaning', ep == 'verification.cleaning') }}{% endif %}
-      {% if can('use_ai') %}{{ item(6, 'ai.index', 'AI Email Assistant', ep.startswith('ai.')) }}{% endif %}
-      {% if can('view_templates') %}{{ item(7, 'templates.index', 'Templates', ep.startswith('templates.')) }}{% endif %}
-      {% if can('view_campaigns') %}{{ item(8, 'campaigns.index', 'Campaigns', ep.startswith('campaigns.') and request.args.get('sequences') != '1' and ep != 'campaigns.steps') }}
-      {{ item(9, 'campaigns.index', 'Follow-up Sequences', request.args.get('sequences') == '1' or ep == 'campaigns.steps', {'sequences': 1}) }}{% endif %}
-      {% if can('transactional') %}{{ item(10, 'main.transactional', 'Transactional Email', ep == 'main.transactional') }}{% endif %}
-      {% if can('view_deliverability') %}{{ item(11, 'deliverability.index', 'Deliverability Centre', ep.startswith('deliverability.')) }}{% endif %}
-      {% if can('view_analytics') %}{{ item(12, 'analytics.index', 'Analytics', ep.startswith('analytics.')) }}{% endif %}
-      {% if can('manage_integrations') %}{{ item(13, 'settings.integrations', 'Integrations', ep == 'settings.integrations') }}{% endif %}
-      {% if can('manage_settings') %}{{ item(14, 'settings.index', 'Settings', ep == 'settings.index') }}{% endif %}
-      {% if can('manage_users') %}{{ item(15, 'admin.team', 'Administration', ep.startswith('admin.') and not ep.startswith('admin.system')) }}{% endif %}
+      {% for s in sections %}
+      <li><a href="{{ url_for(s.url[0], **s.url[1]) }}"{% if s.active %} aria-current="page"{% endif %}><span class="num" aria-hidden="true">{{ s.icon }}</span>{{ s.label }}</a></li>
+      {% endfor %}
     </ul>
-    {% endif %}
-    {% if user.is_superadmin %}
-    <div class="nav-group">System</div>
-    <ul class="nav">
-      {{ item('⚙', 'admin.system', 'System administration', ep.startswith('admin.system')) }}
-    </ul>
-    {% endif %}
-    <div class="nav-group">Account</div>
-    <ul class="nav">
-      {{ item('🔒', 'auth.security', 'Security & privacy', ep == 'auth.security') }}
-    </ul>
+    <p class="nav-help muted">Need help? Start on <a href="{{ url_for('main.overview') }}">Home</a>: it shows what to do next.</p>
   </nav>
   <div class="main">
     <header class="topbar">
@@ -64,7 +39,7 @@
       </form>
       {% endif %}
       <span class="spacer"></span>
-      {% if ws and ws.sandbox_mode %}<a class="badge sim" href="{{ url_for('settings.integrations') if can('manage_integrations') else '#' }}" title="Nothing is really sent while sandbox mode is on">Sandbox mode</a>{% endif %}
+      {% if ws and ws.sandbox_mode %}<a class="badge sim" href="{{ url_for('settings.integrations') if can('manage_integrations') else '#' }}" title="Practice mode: nothing is really sent">Practice mode · nothing is sent</a>{% endif %}
       {% if ws and ws.sending_paused_reason %}<a class="badge bad" href="{{ url_for('deliverability.index') }}" title="{{ ws.sending_paused_reason }}">Sending paused</a>{% endif %}
       <button class="btn small" type="button" data-theme-toggle aria-label="Switch light or dark theme">◐ Theme</button>
       <span class="who muted">{{ user.full_name }} · {{ ROLES.get(user.role, user.role) }}</span>
@@ -74,6 +49,11 @@
       </form>
     </header>
     <main id="main" class="content">
+      {% for s in sections if s.active and s.tabs|length > 1 %}
+      <nav class="tabs section-tabs" aria-label="{{ s.label }}">
+        {% for t in s.tabs %}<a href="{{ url_for(t.endpoint, **t.args) }}"{% if t.active %} aria-current="page"{% endif %}>{{ t.label }}</a>{% endfor %}
+      </nav>
+      {% endfor %}
       {% block content %}{% endblock %}
     </main>
   </div>

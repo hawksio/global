@@ -1,13 +1,13 @@
 {% extends "base.html" %}{% from "_ui.html" import csrf %}
-{% block title %}List cleaning{% endblock %}
+{% block title %}Clean up your list{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>List cleaning</h1><p>{{ '{:,}'.format(total) }} contacts. Clean before you send: it protects your sender reputation.</p></div>
+<div class="page-head"><div><h1>Clean up your list</h1><p>{{ '{:,}'.format(total) }} contacts. Clean before you send: it protects your sender reputation.</p></div>
   {% if can('export_contacts') %}<a class="btn primary" href="{{ url_for('verification.cleaning_export') }}">Export cleaned contacts</a>{% endif %}</div>
 <div class="table-wrap"><table><thead><tr><th>Group</th><th class="num">Contacts</th><th>Actions</th></tr></thead><tbody>
 {% for key, (label, n) in groups.items() %}<tr><td><strong>{{ label }}</strong></td><td class="num">{{ n }}</td><td>
   {% if n %}<form method="post" action="{{ url_for('verification.cleaning_apply') }}" class="actions">{{ csrf() }}<input type="hidden" name="group" value="{{ key }}">
     <a class="btn small" href="{{ url_for('contacts.index', verification_status=key) if key in VERIFICATION else url_for('contacts.index') }}">View</a>
-    <button class="btn small" name="action" value="verify">Re-check</button>
+    <button class="btn small" name="action" value="verify">Check again</button>
     <button class="btn small" name="action" value="tag">Tag for review</button>
     {% if key not in ('role', 'unverified', 'no_basis') %}<button class="btn small" name="action" value="suppress" data-confirm="Suppress all {{ n }} addresses in “{{ label }}”?">Suppress</button>{% endif %}
     {% if can('delete_contacts') %}<button class="btn small danger" name="action" value="delete" data-confirm="Permanently delete all {{ n }} contacts in “{{ label }}”? Suppression records are kept.">Delete</button>{% endif %}
@@ -17,5 +17,5 @@
   <p class="muted">These differ only by dots. Some providers deliver them to the same mailbox and others don't, so we never merge them automatically.</p>
   {% for l in lookalikes %}<p><small>{{ l.emails }}</small></p>{% else %}<p class="muted">None found.</p>{% endfor %}
 </section>
-<p class="muted">The cleaned export contains only validated, active, non-disposable contacts with a recorded lawful basis and no opt-out.</p>
+<p class="muted">The cleaned export contains only validated, active, non-disposable contacts with a recorded permission to email and no opt-out.</p>
 {% endblock %}

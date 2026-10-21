@@ -28,8 +28,8 @@
   <section class="card mt" style="max-width:860px"><h2>Add selected results to contacts</h2>
     <div class="field"><label for="purpose">Purpose</label><input id="purpose" type="text" name="purpose" placeholder="e.g. Offering our B2B packaging service"></div>
     <div class="row">
-      <div class="field"><label for="recipient_type">Recipient type</label><select id="recipient_type" name="recipient_type">{% for k, v in RECIPIENT_TYPES.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
-      <div class="field"><label for="lawful_basis">Lawful basis</label><select id="lawful_basis" name="lawful_basis">{% for k, v in LAWFUL_BASES.items() %}<option value="{{ k }}" {% if k == 'unknown' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+      <div class="field"><label for="recipient_type">Type of address</label><select id="recipient_type" name="recipient_type">{% for k, v in RECIPIENT_TYPES.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="lawful_basis">Permission to email</label><select id="lawful_basis" name="lawful_basis">{% for k, v in LAWFUL_BASES.items() %}<option value="{{ k }}" {% if k == 'unknown' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
         <div class="help">B2B outreach to a published business address may rely on legitimate interest in some countries (not all, e.g. it often needs consent for individuals' addresses in the EU/UK). Check your local rules.</div></div>
       <div class="field"><label for="tag">Tag</label><input id="tag" type="text" name="tag" placeholder="optional"></div>
     </div>

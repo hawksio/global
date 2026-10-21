@@ -105,11 +105,11 @@ def integrations():
         elif action == "sandbox":
             on = request.form.get("sandbox_mode") == "on"
             if not on and not get_secret(ws["id"], "resend_api_key"):
-                flash("Add a Resend API key before leaving sandbox mode.", "error")
+                flash("Add a Resend API key before turning off practice mode.", "error")
                 return redirect(url_for("settings.integrations"))
             execute("UPDATE workspaces SET sandbox_mode = ? WHERE id = ?", (int(on), ws["id"]))
             audit("integration.sandbox", detail="on" if on else "off")
-            flash("Sandbox mode is " + ("on: nothing will be sent." if on else "off: approved, non-simulation campaigns send "
+            flash("Practice mode is " + ("on: nothing will be sent." if on else "off: approved, campaigns that aren't practice runs send "
                                                                               "real email."), "success")
         elif action == "update_disposable":
             if not current_user()["is_superadmin"]:
