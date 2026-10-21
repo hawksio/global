@@ -1,0 +1,6 @@
+Hi {{ name }},
+
+{{ what }}
+Time: {{ when }}
+
+If this wasn't you, reset your password: {{ base_url }}/forgot

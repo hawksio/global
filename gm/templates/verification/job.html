@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% from "_ui.html" import job_progress, jbadge, vbadge %}
+{% block title %}Job #{{ job.id }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ {'verify_csv': 'CSV validation', 'verify_contacts': 'Contact re-check', 'import_contacts': 'Import', 'discover': 'Discovery'}.get(job.kind, job.kind) }} #{{ job.id }}</h1>
+  <p>{{ jbadge(job.status) }}{% if params.filename %} · {{ params.filename }}{% endif %} · started {{ job.created_at|dt }} UTC</p></div>
+  <div class="actions">{% if job.kind == 'verify_csv' and job.status == 'completed' %}<a class="btn" href="{{ url_for('verification.report', job_id=job.id) }}">Full report (CSV)</a><a class="btn primary" href="{{ url_for('verification.report', job_id=job.id, only='clean') }}">Cleaned file (validated only)</a>{% endif %}
+  <a class="btn" href="{{ url_for('verification.index') }}">Back</a></div></div>
+<section class="card">{{ job_progress(job) }}</section>
+{% if result %}<section class="card"><h2>Summary</h2><div class="grid cols-4">
+  {% for k, v in result.items() %}<div class="stat"><div class="label">{{ VERIFICATION.get(k, k.replace('_', ' ')|capitalize) }}</div><div class="value">{{ v }}</div></div>{% endfor %}
+</div><p class="muted mt">Local checks only. “Validated” is not proof that a mailbox exists.</p></section>{% endif %}
+{% endblock %}

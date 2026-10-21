@@ -1,0 +1,31 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}System administration{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>System administration</h1><p>Environment: <strong>{{ health.env }}</strong> · sign-up {{ 'open' if health.signup else 'invitation only' }} · transactional email: {{ health.transactional }}</p></div>
+  <div class="actions"><a class="btn" href="{{ url_for('admin.system_users') }}">All users</a><a class="btn" href="{{ url_for('admin.system_jobs') }}">Background jobs</a></div></div>
+<div class="grid cols-4">
+  <div class="stat"><div class="label">Jobs queued / running</div><div class="value">{{ health.jobs_queued }} / {{ health.jobs_running }}</div><div class="hint">Last finished {{ health.worker_last|dt or 'never' }} UTC</div></div>
+  <div class="stat"><div class="label">Failed jobs (24h)</div><div class="value">{{ health.jobs_failed_24h }}</div></div>
+  <div class="stat"><div class="label">Webhooks (24h)</div><div class="value">{{ health.webhooks_24h }}</div><div class="hint">{{ health.webhook_errors }} unprocessed</div></div>
+  <div class="stat"><div class="label">Transactional failures (24h)</div><div class="value">{{ health.tx_failed_24h }}</div><div class="hint">Database {{ health.db_size_mb }} MB</div></div>
+</div>
+{% if health.jobs_queued and not health.worker_last %}<div class="notice warn mt"><p>Jobs are waiting but none has ever finished. Is the cron job (<code>flask --app gm worker --once</code>) set up?</p></div>{% endif %}
+<section class="card mt"><h2>Workspaces and quotas</h2>
+  <div class="table-wrap"><table><thead><tr><th>Workspace</th><th class="num">Users</th><th class="num">Contacts</th><th class="num">Sent (30d)</th><th>Mode</th><th>Quotas (day / hour / AI per month / discovery per day)</th><th></th></tr></thead><tbody>
+  {% for w in workspaces %}<tr><td>{{ w.name }}<br><small class="muted">{{ w.created_at[:10] }}</small></td><td class="num">{{ w.users }}</td><td class="num">{{ w.contacts }}</td><td class="num">{{ w.sent30 }}</td>
+    <td>{% if w.sandbox_mode %}<span class="badge sim">sandbox</span>{% else %}<span class="badge ok">live</span>{% endif %}{% if w.sending_paused_reason %} <span class="badge bad" title="{{ w.sending_paused_reason }}">paused</span>{% endif %}</td>
+    <td><form method="post" action="{{ url_for('admin.system_workspace', workspace_id=w.id) }}" class="actions">{{ csrf() }}<input type="hidden" name="action" value="quotas">
+      <input type="number" name="daily_send_limit" value="{{ w.daily_send_limit }}" style="width:90px" aria-label="Daily limit"><input type="number" name="hourly_send_limit" value="{{ w.hourly_send_limit }}" style="width:80px" aria-label="Hourly limit">
+      <input type="number" name="ai_monthly_limit" value="{{ w.ai_monthly_limit }}" style="width:80px" aria-label="AI limit"><input type="number" name="discovery_daily_limit" value="{{ w.discovery_daily_limit }}" style="width:80px" aria-label="Discovery limit">
+      <button class="btn small" type="submit">Save</button></form></td>
+    <td><form method="post" action="{{ url_for('admin.system_workspace', workspace_id=w.id) }}" data-confirm="Pause all sending for {{ w.name }}?">{{ csrf() }}<input type="hidden" name="action" value="pause"><input type="hidden" name="reason" value="manual review"><button class="btn small danger" type="submit">Pause sending</button></form></td></tr>{% endfor %}
+  </tbody></table></div></section>
+<section class="card"><h2>System credentials</h2>
+  <p class="muted">Environment variables take precedence. Values are encrypted and never displayed.</p>
+  {% for name, label, hint, env in [('resend_api_key', 'Resend key for transactional email', resend_hint, env_keys.resend), ('resend_webhook_secret', 'Signing secret for /webhooks/resend/system', webhook_hint, env_keys.webhook), ('anthropic_api_key', 'Anthropic API key (AI assistant)', anthropic_hint, env_keys.anthropic)] %}
+  <form method="post" action="{{ url_for('admin.system_keys') }}" class="toolbar">{{ csrf() }}<input type="hidden" name="name" value="{{ name }}">
+    <div class="field" style="flex:1"><label for="k-{{ name }}">{{ label }} {% if env %}<span class="badge ok">set by environment</span>{% elif hint %}<span class="badge ok">saved {{ hint.hint }}</span>{% else %}<span class="badge">not set</span>{% endif %}</label><input id="k-{{ name }}" type="password" name="value" autocomplete="off"></div>
+    <button class="btn" type="submit">Save</button></form>{% endfor %}
+</section>
+<section class="card"><h2>Backups</h2>{% for b in health.backups %}<p class="mono"><small>{{ b }}</small></p>{% else %}<p class="muted">No backups in instance/backups yet. Schedule <code>flask --app gm backup</code> daily (see DEPLOYMENT.md).</p>{% endfor %}</section>
+{% endblock %}

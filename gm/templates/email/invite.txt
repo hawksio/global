@@ -1,0 +1,6 @@
+Hi {{ name }},
+
+{{ inviter }} invited you to join their workspace on Global Marketing. Accept and choose a password:
+{{ link }}
+
+The link works once and expires in 72 hours.

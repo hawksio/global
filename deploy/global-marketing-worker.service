@@ -1,0 +1,15 @@
+# VPS alternative to cron: a continuously running worker (systemd). Adjust paths and user.
+[Unit]
+Description=Global Marketing background worker
+After=network.target
+
+[Service]
+User=gm
+WorkingDirectory=/srv/global-marketing
+EnvironmentFile=/srv/global-marketing/.env
+ExecStart=/srv/global-marketing/.venv/bin/flask --app gm worker
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

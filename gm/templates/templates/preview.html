@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}Preview {{ t.name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Preview · {{ t.name }}{% if version %} (version {{ version }}){% endif %}</h1><p><strong>Subject:</strong> {{ subject }}</p></div>
+  <div class="actions"><a class="btn" href="{{ url_for('templates.edit', template_id=t.id) }}">Edit</a></div></div>
+<div class="grid" style="grid-template-columns: minmax(0, 3fr) minmax(240px, 1fr)">
+<section class="card">
+  <div class="actions" style="margin-bottom:10px"><button class="btn small" type="button" data-preview-mode="desktop" data-target="pv">Desktop</button><button class="btn small" type="button" data-preview-mode="mobile" data-target="pv">Mobile</button></div>
+  <iframe id="pv" class="preview-frame" title="Email preview" sandbox srcdoc="{{ html_out }}"></iframe>
+  <h3 class="mt">Plain-text version</h3><pre class="text">{{ text_out }}</pre>
+  <h3>Headers added</h3><pre class="text">{% for k, v in headers.items() %}{{ k }}: {{ v }}
+{% endfor %}</pre>
+</section>
+<aside>
+  <section class="card"><h2>Test with a contact</h2>
+    <form method="get"><label for="cid">Show the email as this contact would see it</label>
+      <select id="cid" name="contact_id" data-autosubmit><option value="">Sample contact (Alex Example)</option>{% for c in sample_contacts %}<option value="{{ c.id }}" {% if contact and contact.id == c.id %}selected{% endif %}>{{ c.email }}</option>{% endfor %}</select>
+      {% if version %}<input type="hidden" name="version" value="{{ version }}">{% endif %}</form>
+    {% if missing %}<div class="notice warn mt"><p>Empty for this contact with no fallback: {{ missing|join(', ') }}</p></div>{% endif %}
+  </section>
+  <section class="card"><h2>Content check</h2>{% for f in findings %}<p><span class="badge {{ {'error': 'bad', 'warn': 'warn', 'ok': 'ok'}.get(f.level, 'info') }}">{{ f.level }}</span> <strong>{{ f.title }}</strong><br><small>{{ f.detail }}</small></p>{% endfor %}</section>
+  {% if can('edit_templates') %}<section class="card"><h2>Send a test</h2>
+    <form method="post" action="{{ url_for('templates.test', template_id=t.id) }}">{{ csrf() }}
+      <div class="field"><label for="to">To (a team member)</label><input id="to" type="email" name="to" value="{{ current_user().email }}" required></div>
+      <button class="btn" type="submit">Send test email</button>
+      <p class="muted mt"><small>Marked [TEST]. {% if workspace().sandbox_mode %}Sandbox mode: written to the outbox, not sent.{% endif %}</small></p></form></section>{% endif %}
+</aside>
+</div>
+{% endblock %}

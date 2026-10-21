@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %} · Global Marketing</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+{% set user = current_user() %}
+{% set ws = workspace() if user and user.workspace_id else None %}
+<body{% if ws and ws.brand_color %} style="--brand: {{ ws.brand_color }}"{% endif %}>
+<a class="skip" href="#main">Skip to content</a>
+{% if not production %}<div class="env-banner">Development environment · emails go to the local sandbox outbox unless Resend is configured</div>{% endif %}
+{% if user and (self.content()|trim or not self.public()|trim) %}
+<div class="shell">
+  <nav class="sidebar" aria-label="Main navigation">
+    <a class="brand" href="{{ url_for('main.overview') }}">
+      {% if ws and ws.logo_url %}<img src="{{ ws.logo_url }}" alt="">{% else %}<img src="{{ url_for('static', filename='logo.svg') }}" alt="">{% endif %}
+      <span>{{ ws.name if ws else 'Global Marketing' }}</span>
+    </a>
+    {% set ep = request.endpoint or '' %}
+    {% macro item(n, endpoint, label, active, args={}) %}
+      <li><a href="{{ url_for(endpoint, **args) }}"{% if active %} aria-current="page"{% endif %}><span class="num">{{ n }}</span>{{ label }}</a></li>
+    {% endmacro %}
+    {% if ws %}
+    <ul class="nav">
+      {{ item(1, 'main.overview', 'Overview', ep in ('main.overview', 'main.onboarding')) }}
+      {% if can('view_contacts') %}{{ item(2, 'contacts.index', 'Contacts', ep.startswith('contacts.') or ep.startswith('suppression.')) }}{% endif %}
+      {% if can('discover') %}{{ item(3, 'discovery.index', 'Discover Contacts', ep.startswith('discovery.')) }}{% endif %}
+      {% if can('verify') %}{{ item(4, 'verification.index', 'Email Verification', ep in ('verification.index', 'verification.job')) }}
+      {{ item(5, 'verification.cleaning', 'List Cleaning', ep == 'verification.cleaning') }}{% endif %}
+      {% if can('use_ai') %}{{ item(6, 'ai.index', 'AI Email Assistant', ep.startswith('ai.')) }}{% endif %}
+      {% if can('view_templates') %}{{ item(7, 'templates.index', 'Templates', ep.startswith('templates.')) }}{% endif %}
+      {% if can('view_campaigns') %}{{ item(8, 'campaigns.index', 'Campaigns', ep.startswith('campaigns.') and request.args.get('sequences') != '1' and ep != 'campaigns.steps') }}
+      {{ item(9, 'campaigns.index', 'Follow-up Sequences', request.args.get('sequences') == '1' or ep == 'campaigns.steps', {'sequences': 1}) }}{% endif %}
+      {% if can('transactional') %}{{ item(10, 'main.transactional', 'Transactional Email', ep == 'main.transactional') }}{% endif %}
+      {% if can('view_deliverability') %}{{ item(11, 'deliverability.index', 'Deliverability Centre', ep.startswith('deliverability.')) }}{% endif %}
+      {% if can('view_analytics') %}{{ item(12, 'analytics.index', 'Analytics', ep.startswith('analytics.')) }}{% endif %}
+      {% if can('manage_integrations') %}{{ item(13, 'settings.integrations', 'Integrations', ep == 'settings.integrations') }}{% endif %}
+      {% if can('manage_settings') %}{{ item(14, 'settings.index', 'Settings', ep == 'settings.index') }}{% endif %}
+      {% if can('manage_users') %}{{ item(15, 'admin.team', 'Administration', ep.startswith('admin.') and not ep.startswith('admin.system')) }}{% endif %}
+    </ul>
+    {% endif %}
+    {% if user.is_superadmin %}
+    <div class="nav-group">System</div>
+    <ul class="nav">
+      {{ item('⚙', 'admin.system', 'System administration', ep.startswith('admin.system')) }}
+    </ul>
+    {% endif %}
+    <div class="nav-group">Account</div>
+    <ul class="nav">
+      {{ item('🔒', 'auth.security', 'Security & privacy', ep == 'auth.security') }}
+    </ul>
+  </nav>
+  <div class="main">
+    <header class="topbar">
+      <button class="btn small menu-toggle" type="button" data-menu-toggle aria-label="Open menu">☰ Menu</button>
+      {% if ws %}
+      <form class="search" action="{{ url_for('main.search') }}" role="search">
+        <label class="sr-only" for="global-search">Search</label>
+        <input id="global-search" type="search" name="q" placeholder="Search contacts, campaigns, templates…" value="{{ request.args.get('q', '') if ep == 'main.search' else '' }}">
+      </form>
+      {% endif %}
+      <span class="spacer"></span>
+      {% if ws and ws.sandbox_mode %}<a class="badge sim" href="{{ url_for('settings.integrations') if can('manage_integrations') else '#' }}" title="Nothing is really sent while sandbox mode is on">Sandbox mode</a>{% endif %}
+      {% if ws and ws.sending_paused_reason %}<a class="badge bad" href="{{ url_for('deliverability.index') }}" title="{{ ws.sending_paused_reason }}">Sending paused</a>{% endif %}
+      <button class="btn small" type="button" data-theme-toggle aria-label="Switch light or dark theme">◐ Theme</button>
+      <span class="who muted">{{ user.full_name }} · {{ ROLES.get(user.role, user.role) }}</span>
+      <form method="post" action="{{ url_for('auth.logout') }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn small" type="submit">Sign out</button>
+      </form>
+    </header>
+    <main id="main" class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% else %}
+<main id="main" class="auth">
+  <div style="width:100%;max-width:{% block auth_width %}440px{% endblock %}">
+    <a class="brand" href="{{ url_for('auth.login') }}"><img src="{{ url_for('static', filename='logo.svg') }}" alt=""><span>Global Marketing</span></a>
+    {% block public %}{% endblock %}
+    <p class="muted" style="text-align:center;margin-top:12px"><button class="btn link" type="button" data-theme-toggle>Switch theme</button></p>
+  </div>
+</main>
+{% endif %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}<div class="toasts" role="status" aria-live="polite">
+  {% for cat, msg in messages %}<div class="toast {{ cat }}">{{ msg }}<button type="button" data-dismiss aria-label="Dismiss">×</button></div>{% endfor %}
+  </div>{% endif %}
+{% endwith %}
+</body>
+</html>

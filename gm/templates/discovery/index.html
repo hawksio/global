@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf, jbadge %}
+{% block title %}Discover contacts{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Discover contacts</h1><p>Find email addresses that companies publish on their own websites: contact, about, team and imprint pages.</p></div></div>
+<div class="grid cols-2">
+  <section class="card"><h2>New discovery run</h2>
+    <form method="post" enctype="multipart/form-data">{{ csrf() }}
+      <div class="field"><label for="targets">Websites or domains, one per line</label><textarea id="targets" name="targets" rows="7" placeholder="examplecompany.com&#10;https://www.another-business.co.uk&#10;Acme Ltd, acme-example.com"></textarea>
+        <div class="help">Up to {{ max_domains }} per run. “Company name, domain” lines keep the company name.</div></div>
+      <div class="field"><label for="file">…or upload a list (CSV/TXT)</label><input id="file" type="file" name="file" accept=".csv,.txt"></div>
+      <label class="check"><input type="checkbox" name="confirm" required> <span>I'll use the results lawfully, respect each site's terms, and only contact people for a legitimate business reason.</span></label>
+      <button class="btn primary" type="submit">Start discovery</button></form>
+  </section>
+  <section class="card"><h2>How it works</h2>
+    <ul>
+      <li>Visits only the company's own public site: the home page and up to {{ config.CRAWL_MAX_PAGES }} linked contact/about/team pages.</li>
+      <li>Obeys robots.txt and crawl delays, waits between requests, and uses short timeouts.</li>
+      <li>Never logs in, solves CAPTCHAs, or gets around paywalls or other protections.</li>
+      <li>Collects only addresses actually written on the page. It never guesses addresses from names.</li>
+      <li>Records the page and date for each result. You review everything before it becomes a contact.</li>
+    </ul>
+    <p class="muted">Basic discovery is free and runs on this server. No paid API is used.</p>
+  </section>
+</div>
+<section class="card"><h2>Runs</h2>
+  <div class="table-wrap"><table><thead><tr><th>Run</th><th>Status</th><th class="num">Domains</th><th class="num">Addresses found</th><th>Started (UTC)</th></tr></thead><tbody>
+  {% for r in runs %}<tr><td><a href="{{ url_for('discovery.run', job_id=r.id) }}">Run #{{ r.id }}</a></td><td>{{ jbadge(r.status) }}</td><td class="num">{{ r.total }}</td><td class="num">{{ r.found }}</td><td><small>{{ r.created_at|dt }}</small></td></tr>
+  {% else %}<tr><td colspan="5" class="muted">No runs yet.</td></tr>{% endfor %}</tbody></table></div>
+</section>
+{% endblock %}

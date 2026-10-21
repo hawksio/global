@@ -1,0 +1,60 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}Security & privacy{% endblock %}
+{% block content %}
+{% set u = current_user() %}
+<div class="page-head"><div><h1>Security &amp; privacy</h1><p>{{ u.email }}</p></div></div>
+<div class="grid cols-2">
+  <section class="card">
+    <h2>Change password</h2>
+    <form method="post" action="{{ url_for('auth.change_password') }}">{{ csrf() }}
+      <div class="field"><label for="current">Current password</label><input id="current" type="password" name="current" autocomplete="current-password" required></div>
+      <div class="field"><label for="newpw">New password</label><input id="newpw" type="password" name="password" minlength="12" autocomplete="new-password" required></div>
+      <button class="btn primary" type="submit">Change password</button>
+    </form>
+  </section>
+  <section class="card" id="mfa">
+    <h2>Two-step verification</h2>
+    {% if u.mfa_enabled %}
+      <p><span class="badge ok">On</span> Authenticator app codes are required at sign-in.</p>
+      <form method="post" action="{{ url_for('auth.mfa_disable') }}" data-confirm="Turn off authenticator codes?">{{ csrf() }}
+        <div class="field"><label for="pw-off">Confirm with your password</label><input id="pw-off" type="password" name="password" required></div>
+        <button class="btn danger" type="submit">Turn off</button>
+      </form>
+    {% elif setup_secret %}
+      <p>Scan this code with an authenticator app (or enter the key manually), then type the 6-digit code it shows.</p>
+      <div style="background:#fff;display:inline-block;padding:8px;border-radius:8px">{{ qr_svg|safe }}</div>
+      <p class="mono">{{ setup_secret }}</p>
+      <form method="post" action="{{ url_for('auth.mfa_confirm') }}">{{ csrf() }}
+        <div class="field"><label for="totp">Code from the app</label><input id="totp" type="text" name="code" inputmode="numeric" maxlength="7" required></div>
+        <button class="btn primary" type="submit">Turn on</button>
+      </form>
+    {% else %}
+      <p>Add a second step at sign-in using an authenticator app (recommended for owners and administrators).</p>
+      <form method="post" action="{{ url_for('auth.mfa_start') }}">{{ csrf() }}<button class="btn primary" type="submit">Set up an authenticator app</button></form>
+    {% endif %}
+    <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+    <form method="post" action="{{ url_for('auth.email_codes') }}">{{ csrf() }}
+      <input type="hidden" name="enabled" value="{{ '0' if u.email_codes else '1' }}">
+      <p>Sign-in codes by email: <span class="badge {{ 'ok' if u.email_codes else '' }}">{{ 'On' if u.email_codes else 'Off' }}</span></p>
+      <button class="btn" type="submit">{{ 'Turn off' if u.email_codes else 'Turn on' }} email codes</button>
+    </form>
+  </section>
+</div>
+<section class="card">
+  <div class="page-head"><h2>Signed-in devices</h2>
+    <form method="post" action="{{ url_for('auth.revoke_others') }}">{{ csrf() }}<button class="btn" type="submit">Sign out all other devices</button></form></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Device</th><th>IP address</th><th>Signed in (UTC)</th><th>Last active (UTC)</th></tr></thead>
+    <tbody>{% for s in sessions %}<tr><td>{{ s.user_agent[:80] or 'Unknown' }}{% if current and s.id == current.id %} <span class="badge info">This device</span>{% endif %}</td><td>{{ s.ip }}</td><td>{{ s.created_at|dt }}</td><td>{{ s.last_seen_at|dt }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+<div class="grid cols-2">
+  <section class="card"><h2>Your data</h2><p>Download your profile, sessions and activity log as JSON.</p><a class="btn" href="{{ url_for('auth.export_account') }}">Export my data</a>
+    {% if can('export_contacts') %}<p class="mt muted">Workspace data (contacts, suppressions, reports) can be exported as CSV from those pages.</p>{% endif %}</section>
+  <section class="card"><h2>Delete account</h2>
+    <p>{% if u.role == 'owner' %}As the owner, deleting your account also permanently deletes the workspace and all its data (you must be its only member).{% else %}Your account is removed; the workspace's data stays with your team.{% endif %}</p>
+    <form method="post" action="{{ url_for('auth.delete_account') }}" data-confirm="Permanently delete your account? This cannot be undone.">{{ csrf() }}
+      <div class="field"><label for="pw-del">Confirm with your password</label><input id="pw-del" type="password" name="password" required></div>
+      <button class="btn danger" type="submit">Delete my account</button></form></section>
+</div>
+{% endblock %}

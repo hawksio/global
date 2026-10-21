@@ -1,0 +1,38 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Settings</h1><p>Company identity, sender, limits and data retention for {{ ws.name }}.</p></div></div>
+<div class="grid cols-2">
+<form method="post" class="card">{{ csrf() }}<input type="hidden" name="section" value="company"><h2>Company and branding</h2>
+  <div class="field"><label for="name">Workspace name</label><input id="name" type="text" name="name" value="{{ ws.name }}"></div>
+  <div class="field"><label for="company_name">Legal company name</label><input id="company_name" type="text" name="company_name" value="{{ ws.company_name }}"></div>
+  <div class="field"><label for="company_address">Postal address (shown in every marketing email)</label><textarea id="company_address" name="company_address" rows="3">{{ ws.company_address }}</textarea></div>
+  <div class="field"><label for="website">Website</label><input id="website" type="url" name="website" value="{{ ws.website }}"></div>
+  <div class="row"><div class="field"><label for="brand_color">Brand colour</label><input id="brand_color" type="color" name="brand_color" value="{{ ws.brand_color }}"></div>
+    <div class="field"><label for="timezone">Default time zone</label><input id="timezone" type="text" name="timezone" value="{{ ws.timezone }}"></div></div>
+  <div class="field"><label for="logo_url">Logo URL (https)</label><input id="logo_url" type="url" name="logo_url" value="{{ ws.logo_url }}"></div>
+  <div class="field"><label for="marketing_footer">Extra footer text for marketing emails</label><textarea id="marketing_footer" name="marketing_footer" rows="2">{{ ws.marketing_footer }}</textarea><div class="help">E.g. company registration number or a note about why people receive your email.</div></div>
+  <button class="btn primary" type="submit">Save</button></form>
+<div>
+<form method="post" class="card">{{ csrf() }}<input type="hidden" name="section" value="sender"><h2>Sender identity</h2>
+  <div class="field"><label for="sender_name">Sender name</label><input id="sender_name" type="text" name="sender_name" value="{{ ws.sender_name }}"></div>
+  <div class="field"><label for="sender_email">Sender email</label><input id="sender_email" type="email" name="sender_email" value="{{ ws.sender_email }}"><div class="help">Must use a domain verified in Resend.</div></div>
+  <div class="field"><label for="reply_to">Reply-to</label><input id="reply_to" type="email" name="reply_to" value="{{ ws.reply_to }}"></div>
+  <button class="btn primary" type="submit">Save</button></form>
+<form method="post" class="card">{{ csrf() }}<input type="hidden" name="section" value="limits"><h2>Limits, safety and retention</h2>
+  <div class="row">
+    <div class="field"><label for="daily">Emails per day</label><input id="daily" type="number" name="daily_send_limit" value="{{ ws.daily_send_limit }}" min="1"></div>
+    <div class="field"><label for="hourly">Emails per hour</label><input id="hourly" type="number" name="hourly_send_limit" value="{{ ws.hourly_send_limit }}" min="1"></div>
+    <div class="field"><label for="gap">Min. hours between emails to one contact</label><input id="gap" type="number" name="min_hours_between_emails" value="{{ ws.min_hours_between_emails }}" min="0"></div>
+    <div class="field"><label for="bounce">Pause if hard bounces exceed (%)</label><input id="bounce" type="number" step="0.1" name="bounce_pause_pct" value="{{ ws.bounce_pause_pct }}"></div>
+    <div class="field"><label for="complaint">Pause if complaints exceed (%)</label><input id="complaint" type="number" step="0.01" name="complaint_pause_pct" value="{{ ws.complaint_pause_pct }}"></div>
+    <div class="field"><label for="ai">AI requests per month</label><input id="ai" type="number" name="ai_monthly_limit" value="{{ ws.ai_monthly_limit }}" min="0"><div class="help">0 = only the free rule-based assistant.</div></div>
+    <div class="field"><label for="disc">Discovery domains per day</label><input id="disc" type="number" name="discovery_daily_limit" value="{{ ws.discovery_daily_limit }}" min="0"></div>
+    <div class="field"><label for="ret">Keep logs and activity for (days)</label><input id="ret" type="number" name="retention_days" value="{{ ws.retention_days }}" min="30"><div class="help">Older message logs, events, discovery results, AI usage and audit entries are deleted automatically.</div></div>
+  </div>
+  <label class="check"><input type="checkbox" name="four_eyes_approval" {% if ws.four_eyes_approval %}checked{% endif %}> <span>Four-eyes approval: campaigns must be approved by someone other than their creator</span></label>
+  <label class="check"><input type="checkbox" name="email_login_codes" {% if ws.email_login_codes %}checked{% endif %}> <span>Require an emailed code at every sign-in for all members (unless they use an authenticator app)</span></label>
+  <button class="btn primary" type="submit">Save</button></form>
+</div>
+</div>
+{% endblock %}

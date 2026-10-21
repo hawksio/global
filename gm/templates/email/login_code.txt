@@ -1,0 +1,5 @@
+Hi {{ name }},
+
+Your sign-in code: {{ code }}
+
+It expires in {{ minutes }} minutes and works once. If you didn't ask for it, you can ignore this email, but consider changing your password because someone else knows it.

@@ -1,0 +1,17 @@
+# TEMPLATE ONLY. Copy to .cpanel.yml at the repository root after replacing CPANELUSER and confirming the paths
+# on your hosting account (see DEPLOYMENT.md, "cPanel"). cPanel runs these tasks when you click
+# "Deploy HEAD Commit" in Git Version Control. The working tree must be clean.
+---
+deployment:
+  tasks:
+    # Application code lives OUTSIDE public_html. Data (database, uploads, backups) lives in GM_INSTANCE_DIR,
+    # which is outside the deploy path, so --delete can never touch it.
+    - export DEPLOYPATH=/home/CPANELUSER/global-marketing/
+    - export VENV=/home/CPANELUSER/virtualenv/global-marketing/3.12
+    - /bin/mkdir -p $DEPLOYPATH
+    - /usr/bin/rsync -a --delete --exclude '.git/' --exclude '.env' --exclude 'instance/' --exclude '.venv/' --exclude 'tmp/' ./ $DEPLOYPATH
+    # Dependencies and migrations are NOT automatic on cPanel; these two steps do them on every deploy.
+    - $VENV/bin/pip install --quiet -r $DEPLOYPATH/requirements.txt
+    - cd $DEPLOYPATH && $VENV/bin/flask --app gm migrate
+    # Tell Passenger to reload the app.
+    - /bin/mkdir -p $DEPLOYPATH/tmp && /bin/touch $DEPLOYPATH/tmp/restart.txt

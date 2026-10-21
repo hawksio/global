@@ -1,0 +1,43 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf, job_progress, jbadge %}
+{% block title %}Discovery run #{{ job.id }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Discovery run #{{ job.id }}</h1><p>{{ jbadge(job.status) }} · {{ params.targets|length }} domains · started {{ job.created_at|dt }} UTC</p></div>
+  <div class="actions">{% if can('export_contacts') %}<a class="btn" href="{{ url_for('discovery.export', job_id=job.id) }}">Export CSV</a>{% endif %}<a class="btn" href="{{ url_for('discovery.index') }}">All runs</a></div></div>
+{% if job.status in ('queued', 'running') %}<section class="card">{{ job_progress(job) }}</section>{% endif %}
+{% if result %}<div class="grid cols-4">
+  <div class="stat"><div class="label">Pages fetched</div><div class="value">{{ result.pages }}</div></div>
+  <div class="stat"><div class="label">Unique addresses</div><div class="value">{{ result.unique_emails }}</div></div>
+  <div class="stat"><div class="label">Pages skipped by robots.txt</div><div class="value">{{ result.blocked_by_robots }}</div></div>
+  <div class="stat"><div class="label">Errors</div><div class="value">{{ result.errors }}</div></div></div>{% endif %}
+<form method="get" class="toolbar mt">
+  <div class="field"><label for="st">Status</label><select id="st" name="status" data-autosubmit><option value="">All</option>{% for s in ['pending', 'added', 'existing', 'dismissed'] %}<option {% if status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="dm">Domain</label><select id="dm" name="domain" data-autosubmit><option value="">All</option>{% for d in domains %}<option {% if domain == d %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></div>
+  <label class="check"><input type="checkbox" name="hide_role" value="1" data-autosubmit {% if request.args.get('hide_role') %}checked{% endif %}> <span>Hide role addresses</span></label>
+</form>
+<form method="post" action="{{ url_for('discovery.review', job_id=job.id) }}">{{ csrf() }}
+  <div class="bulkbar" id="bulk"><strong><span data-count>0</span> selected</strong>
+    <button class="btn small" name="action" value="dismiss">Dismiss</button>
+    <span class="muted">or add them below</span></div>
+  <div class="table-wrap"><table data-bulk="bulk"><thead><tr><th><input type="checkbox" data-select-all aria-label="Select all"></th><th>Address</th><th>Domain</th><th>Company</th><th>Found on</th><th>Status</th></tr></thead><tbody>
+  {% for r in results %}<tr><td>{% if r.status == 'pending' %}<input type="checkbox" name="ids" value="{{ r.id }}" aria-label="Select {{ r.email }}">{% endif %}</td>
+    <td>{{ r.email }}{% if r.is_role %} <span class="badge" title="Generic role address">role</span>{% endif %}{% if r.off_domain %} <span class="badge warn" title="The address is on a different domain from the website">other domain</span>{% endif %}</td>
+    <td>{{ r.domain }}</td><td>{{ r.company }}</td><td><a href="{{ r.source_url }}" rel="noopener noreferrer nofollow" target="_blank"><small>{{ r.source_url[:60] }}</small></a><br><small class="muted">{{ r.found_at|dt }} UTC</small></td>
+    <td>{% if r.contact_id %}<a href="{{ url_for('contacts.detail', contact_id=r.contact_id) }}">{{ r.status }}</a>{% else %}{{ r.status }}{% endif %}</td></tr>
+  {% else %}<tr><td colspan="6" class="muted">{{ 'Still running…' if job.status in ('queued', 'running') else 'No published addresses found.' }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  <section class="card mt" style="max-width:860px"><h2>Add selected results to contacts</h2>
+    <div class="field"><label for="purpose">Purpose</label><input id="purpose" type="text" name="purpose" placeholder="e.g. Offering our B2B packaging service"></div>
+    <div class="row">
+      <div class="field"><label for="recipient_type">Recipient type</label><select id="recipient_type" name="recipient_type">{% for k, v in RECIPIENT_TYPES.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="lawful_basis">Lawful basis</label><select id="lawful_basis" name="lawful_basis">{% for k, v in LAWFUL_BASES.items() %}<option value="{{ k }}" {% if k == 'unknown' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+        <div class="help">B2B outreach to a published business address may rely on legitimate interest in some countries (not all, e.g. it often needs consent for individuals' addresses in the EU/UK). Check your local rules.</div></div>
+      <div class="field"><label for="tag">Tag</label><input id="tag" type="text" name="tag" placeholder="optional"></div>
+    </div>
+    <button class="btn primary" name="action" value="add">Add selected to contacts</button>
+  </section>
+</form>
+<details class="card"><summary><strong>Crawl log ({{ pages|length }} requests)</strong></summary>
+  <div class="table-wrap mt"><table><thead><tr><th>URL</th><th>Outcome</th><th class="num">HTTP</th><th class="num">Addresses</th></tr></thead><tbody>
+  {% for p in pages %}<tr><td><small>{{ p.url }}</small></td><td><small>{{ p.outcome }}</small></td><td class="num">{{ p.http_status or '' }}</td><td class="num">{{ p.emails_found }}</td></tr>{% endfor %}
+  </tbody></table></div></details>
+{% endblock %}

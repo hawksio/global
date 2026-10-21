@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf, mbadge %}
+{% block title %}Transactional email{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Transactional email</h1><p>Account emails (verification codes, password resets, security and campaign alerts), kept separate from marketing.</p></div></div>
+<div class="grid cols-2">
+  <section class="card">
+    <h2>Configuration</h2>
+    <dl class="kv">
+      <dt>Provider</dt><dd>{% if provider == 'resend' %}<span class="badge ok">Resend</span>{% else %}<span class="badge sim">Local outbox only</span> nothing is sent{% endif %}</dd>
+      <dt>From</dt><dd>{{ sender }}</dd>
+      <dt>Sending domain</dt><dd>{{ sender_domain }}</dd>
+    </dl>
+    <p class="mt muted">Set by the system administrator through <code>GM_RESEND_API_KEY</code> and <code>GM_TRANSACTIONAL_FROM</code>. Use a different subdomain from marketing (for example <code>accounts.yourcompany.com</code> vs <code>news.yourcompany.com</code>) so marketing reputation never blocks password resets.</p>
+  </section>
+  <section class="card">
+    <h2>How codes are protected</h2>
+    <ul>
+      <li>6-digit codes from a cryptographically secure generator, stored only as keyed hashes.</li>
+      <li>Single use, 10–30 minute expiry, 5 attempts, 60-second resend cooldown, rate-limited.</li>
+      <li>Email bodies are never stored or logged, so administrators never see codes or reset links.</li>
+      <li>Answers never reveal whether an address has an account.</li>
+    </ul>
+    <form method="post" class="mt">{{ csrf() }}
+      <label for="kind">Send yourself a test notification</label>
+      <div class="actions"><select id="kind" name="kind" style="max-width:260px"><option value="security_alert">Security alert</option><option value="admin_alert">Campaign alert</option></select>
+      <button class="btn" type="submit">Send test</button></div>
+    </form>
+  </section>
+</div>
+<section class="card">
+  <h2>Recent transactional messages (yours and your team's)</h2>
+  <div class="table-wrap"><table><thead><tr><th>When (UTC)</th><th>To</th><th>Type</th><th>Status</th><th>Error</th></tr></thead><tbody>
+  {% for m in log %}<tr><td>{{ m.created_at|dt }}</td><td>{{ m.to_email }}</td><td>{{ m.kind.replace('_', ' ') }}</td><td>{{ mbadge(m.status) }}</td><td><small>{{ m.last_error }}</small></td></tr>
+  {% else %}<tr><td colspan="5" class="muted">No transactional email yet.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}{{ 'Edit contact' if contact else 'Add contact' }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ 'Edit ' + contact.email if contact else 'Add a contact' }}</h1><p>Record why you hold this contact. It decides whether they can be emailed.</p></div></div>
+<form method="post" class="card" style="max-width:860px">{{ csrf() }}
+  {% if not contact %}<div class="field"><label for="email">Email address</label><input id="email" type="email" name="email" value="{{ form.get('email', '') }}" required></div>{% endif %}
+  <div class="row">
+    <div class="field"><label for="first_name">First name</label><input id="first_name" type="text" name="first_name" value="{{ form['first_name'] if form and 'first_name' in form.keys() else '' }}"></div>
+    <div class="field"><label for="last_name">Last name</label><input id="last_name" type="text" name="last_name" value="{{ form['last_name'] if form and 'last_name' in form.keys() else '' }}"></div>
+  </div>
+  <div class="row">
+    {% for f, label in [('company', 'Company'), ('job_title', 'Job title'), ('website', 'Website'), ('phone', 'Phone'), ('country', 'Country'), ('industry', 'Industry'), ('timezone', 'Time zone (IANA, optional)')] %}
+    <div class="field"><label for="{{ f }}">{{ label }}</label><input id="{{ f }}" type="text" name="{{ f }}" value="{{ form[f] if form and f in form.keys() else '' }}"></div>
+    {% endfor %}
+  </div>
+  <div class="field"><label for="tags">Tags</label><input id="tags" type="text" name="tags" value="{{ tags or form.get('tags', '') if form and form.get is defined else tags or '' }}" placeholder="e.g. prospects, uk"><div class="help">Comma separated.</div></div>
+  <fieldset><legend>Permission to contact</legend>
+    <div class="row">
+      <div class="field"><label for="recipient_type">Recipient type</label><select id="recipient_type" name="recipient_type">{% for k, v in RECIPIENT_TYPES.items() %}<option value="{{ k }}" {% if form and 'recipient_type' in form.keys() and form['recipient_type'] == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="lawful_basis">Lawful basis</label><select id="lawful_basis" name="lawful_basis">{% set basis = form['lawful_basis'] if form and 'lawful_basis' in form.keys() else 'unknown' %}{% for k, v in LAWFUL_BASES.items() %}<option value="{{ k }}" {% if basis == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+        <div class="help">Consumers (and many EU/UK recipients) need recorded consent. Contacts without a basis are never emailed.</div></div>
+    </div>
+    <div class="field"><label for="purpose">Purpose</label><input id="purpose" type="text" name="purpose" value="{{ form['purpose'] if form and 'purpose' in form.keys() else '' }}" placeholder="e.g. Introducing our logistics service to UK retailers"></div>
+    <div class="field"><label for="source_detail">Where did this contact come from?</label><input id="source_detail" type="text" name="source_detail" value="{{ form['source_detail'] if form and 'source_detail' in form.keys() else '' }}" placeholder="e.g. Met at Trade Expo 2026, gave business card"></div>
+    {% if not contact %}<div class="field"><label for="source_url">Source URL (optional)</label><input id="source_url" type="url" name="source_url" value="{{ form.get('source_url', '') }}"></div>{% endif %}
+    {% if contact %}<label class="check"><input type="checkbox" name="marketing_opt_out" {% if contact.marketing_opt_out %}checked{% endif %}> <span>This person has opted out of marketing</span></label>{% endif %}
+  </fieldset>
+  <div class="field"><label for="notes">Notes</label><textarea id="notes" name="notes" rows="3">{{ form['notes'] if form and 'notes' in form.keys() else '' }}</textarea></div>
+  {% if not contact %}<label class="check"><input type="checkbox" name="dns" checked> <span>Check the domain's mail routing (DNS) now</span></label>{% endif %}
+  <div class="actions"><button class="btn primary" type="submit">Save</button><a class="btn" href="{{ url_for('contacts.detail', contact_id=contact.id) if contact else url_for('contacts.index') }}">Cancel</a></div>
+</form>
+{% endblock %}

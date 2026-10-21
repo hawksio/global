@@ -1,0 +1,31 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}Team{% endblock %}
+{% block content %}
+{% set me = current_user() %}
+<div class="page-head"><div><h1>Administration</h1><p>Team members and roles.</p></div><a class="btn" href="{{ url_for('admin.audit_log') }}">Audit log</a></div>
+<nav class="tabs"><a href="{{ url_for('admin.team') }}" aria-current="page">Team</a><a href="{{ url_for('admin.audit_log') }}">Audit log</a></nav>
+<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Two-step</th><th>Last sign-in</th><th>Actions</th></tr></thead><tbody>
+{% for u in users %}<tr><td>{{ u.full_name }}{% if u.id == me.id %} <span class="badge info">you</span>{% endif %}</td><td>{{ u.email }}</td><td>{{ ROLES[u.role] }}</td>
+  <td>{% if not u.is_active %}<span class="badge bad">Deactivated</span>{% elif not u.last_login_at and not u.email_verified_at %}<span class="badge warn">Invited</span>{% else %}<span class="badge ok">Active</span>{% endif %}</td>
+  <td>{{ 'App' if u.mfa_enabled else ('Email' if u.email_codes else '—') }}</td><td><small>{{ u.last_login_at|dt or 'Never' }}</small></td>
+  <td>{% if u.id != me.id and u.role != 'owner' and (u.role != 'admin' or me.role == 'owner') %}
+    <form method="post" class="actions">{{ csrf() }}<input type="hidden" name="user_id" value="{{ u.id }}">
+      <select name="role" aria-label="Role for {{ u.full_name }}">{% for k, v in ROLES.items() if k != 'owner' and (k != 'admin' or me.role == 'owner') %}<option value="{{ k }}" {% if u.role == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+      <button class="btn small" name="action" value="role">Change role</button>
+      <button class="btn small" name="action" value="toggle">{{ 'Deactivate' if u.is_active else 'Reactivate' }}</button>
+      {% if me.role == 'owner' %}<button class="btn small" name="action" value="transfer" data-confirm="Make {{ u.full_name }} the owner? You'll become an administrator.">Make owner</button>{% endif %}
+      <button class="btn small danger" name="action" value="remove" data-confirm="Remove {{ u.full_name }} from the workspace?">Remove</button></form>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+<section class="card mt" style="max-width:720px"><h2>Invite someone</h2>
+  <form method="post">{{ csrf() }}<input type="hidden" name="action" value="invite">
+    <div class="row"><div class="field"><label for="iname">Name</label><input id="iname" type="text" name="full_name"></div>
+      <div class="field"><label for="iemail">Email</label><input id="iemail" type="email" name="email" required></div>
+      <div class="field"><label for="irole">Role</label><select id="irole" name="role">{% for k, v in ROLES.items() if k != 'owner' and (k != 'admin' or me.role == 'owner') %}<option value="{{ k }}" {% if k == 'marketer' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div></div>
+    <button class="btn primary" type="submit">Send invitation</button></form>
+  <h3 class="mt">What each role can do</h3>
+  <ul><li><strong>Owner</strong>: everything, including ownership transfer and deleting the workspace.</li>
+    <li><strong>Administrator</strong>: everything else, including approving campaigns, integrations, settings and the team.</li>
+    <li><strong>Marketer</strong>: contacts, discovery, verification, AI, templates and campaigns, but can't approve or launch campaigns.</li>
+    <li><strong>Analyst</strong>: read-only access to contacts, campaigns, analytics and deliverability.</li></ul>
+</section>
+{% endblock %}

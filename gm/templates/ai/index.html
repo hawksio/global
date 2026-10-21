@@ -1,0 +1,54 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}AI email assistant{% endblock %}
+{% block content %}
+{% set tasks = [('draft', 'First-contact draft'), ('subjects', 'Subject lines'), ('rewrite', 'Rewrite tone'), ('proofread', 'Proofread'), ('followup', 'Follow-up'), ('variations', 'Variations'), ('check', 'Check content'), ('summarize', 'Summarise a campaign'), ('recommend', 'Recommendations')] %}
+{% set task = i.task or request.args.get('task', 'draft') %}
+<div class="page-head"><div><h1>AI email assistant</h1>
+  <p>Provider: {% if provider_name == 'anthropic' %}<span class="badge ok">Claude ({{ config.AI_MODEL }})</span> · {{ usage }} of {{ limit }} requests used this month{% elif provider_name == 'mock' %}<span class="badge sim">Sandbox mock</span>{% else %}<span class="badge">Free rule-based assistant</span> · connect an AI provider under Integrations for better drafts{% endif %}</p></div></div>
+<div class="notice info"><p>The assistant uses only what you tell it. It won't invent facts about recipients, testimonials, results or promises; it leaves <code>[placeholders]</code> instead. Everything it writes is saved unapproved, and campaigns need a person's approval.</p></div>
+<nav class="tabs">{% for k, label in tasks %}<a href="{{ url_for('ai.index', task=k) }}" {% if task == k %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}</nav>
+<div class="grid cols-2">
+<section class="card">
+  <form method="post">{{ csrf() }}<input type="hidden" name="task" value="{{ task }}">
+  {% if task in ('draft', 'followup', 'subjects') %}
+    <div class="field"><label for="offer">What are you offering?</label><input id="offer" type="text" name="offer" value="{{ i.offer }}" placeholder="e.g. same-day courier service for London retailers" required></div>
+    <div class="field"><label for="audience">Who is it for?</label><input id="audience" type="text" name="audience" value="{{ i.audience }}" placeholder="e.g. independent fashion shops"></div>
+    {% if task != 'subjects' %}<div class="field"><label for="benefit">One true, specific benefit</label><input id="benefit" type="text" name="benefit" value="{{ i.benefit }}" placeholder="e.g. collections until 6pm, delivered the same evening"></div>{% endif %}
+    {% if task == 'draft' %}<div class="field"><label for="goal">What should the reader do?</label><input id="goal" type="text" name="goal" value="{{ i.goal }}" placeholder="e.g. a 15-minute call"></div>{% endif %}
+    {% if task == 'followup' %}<div class="field"><label for="subject">Subject of the first email</label><input id="subject" type="text" name="subject" value="{{ i.subject }}"></div>{% endif %}
+    <div class="field"><label for="facts">Other true facts it may use (optional)</label><textarea id="facts" name="facts" rows="2">{{ i.facts }}</textarea></div>
+  {% elif task in ('rewrite', 'proofread', 'variations', 'check') %}
+    {% if task == 'check' %}<div class="field"><label for="subject">Subject line</label><input id="subject" type="text" name="subject" value="{{ i.subject }}"></div>{% endif %}
+    <div class="field"><label for="text">Email text{% if task == 'check' %} (HTML allowed){% endif %}</label><textarea id="text" name="text" rows="10" required>{{ i.text }}</textarea></div>
+  {% else %}
+    <div class="field"><label for="campaign_id">Campaign</label><select id="campaign_id" name="campaign_id">{% for c in campaigns %}<option value="{{ c.id }}" {% if i.campaign_id == c.id|string %}selected{% endif %}>{{ c.name }}</option>{% else %}<option value="">No campaigns yet</option>{% endfor %}</select>
+      <div class="help">Uses only the campaign's real numbers. Unavailable figures stay unavailable.</div></div>
+  {% endif %}
+  {% if task in ('draft', 'rewrite') %}<div class="field"><label for="tone">Tone</label><select id="tone" name="tone">{% for k, v in TONES.items() %}<option value="{{ k }}" {% if i.tone == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>{% endif %}
+  <button class="btn primary" type="submit">{{ 'Check' if task == 'check' else 'Generate' }}</button>
+  </form>
+</section>
+<section class="card">
+  <h2>Result</h2>
+  {% if result %}
+    {% for n in result.notes %}<div class="notice {{ 'sim' if result.provider == 'mock' else 'info' }}"><p>{{ n }}</p></div>{% endfor %}
+    {% if draft %}
+      <form method="post" action="{{ url_for('ai.save_as_template') }}">{{ csrf() }}
+        <div class="field"><label for="d-subject">Subject</label><input id="d-subject" type="text" name="subject" value="{{ draft[0] }}"></div>
+        <div class="field"><label for="d-body">Body</label><textarea id="d-body" name="body" rows="12">{{ draft[1] }}</textarea></div>
+        <div class="field"><label for="d-name">Template name</label><input id="d-name" type="text" name="name" placeholder="e.g. Courier intro v1"></div>
+        {% if can('edit_templates') %}<button class="btn primary" type="submit">Save as template (unapproved)</button>{% endif %}
+      </form>
+      {% if draft_findings %}<h3 class="mt">Automatic content check</h3>{% for f in draft_findings %}<p><span class="badge {{ {'error': 'bad', 'warn': 'warn', 'ok': 'ok'}.get(f.level, 'info') }}">{{ f.level }}</span> <strong>{{ f.title }}</strong> <small>{{ f.detail }}</small></p>{% endfor %}{% endif %}
+    {% elif subjects %}
+      <ul>{% for s in subjects %}<li>{{ s }} <small class="muted">({{ s|length }} characters)</small></li>{% endfor %}</ul>
+    {% else %}
+      <pre class="text" id="ai-out">{{ result.text }}</pre><button class="btn small" type="button" data-copy="ai-out">Copy</button>
+    {% endif %}
+    <p class="muted mt"><small>Generated by {{ result.provider }}{% if result.model and result.model not in ('rules', 'mock') %} ({{ result.model }}){% endif %}. Review before use.</small></p>
+  {% elif findings %}
+    {% for f in findings %}<p><span class="badge {{ {'error': 'bad', 'warn': 'warn', 'ok': 'ok'}.get(f.level, 'info') }}">{{ f.level }}</span> <strong>{{ f.title }}</strong><br><small>{{ f.detail }}</small></p>{% endfor %}
+  {% else %}<p class="muted">Fill in the form and the result appears here.</p>{% endif %}
+</section>
+</div>
+{% endblock %}

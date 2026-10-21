@@ -1,0 +1,4 @@
+{% extends "email/_layout.html" %}{% block body %}
+<p>Hi {{ name }},</p><p>{{ what }}</p><p style="color:#6b7280">Time: {{ when }}</p>
+<p>If this wasn't you, <a href="{{ base_url }}/forgot">reset your password</a> straight away.</p>
+{% endblock %}

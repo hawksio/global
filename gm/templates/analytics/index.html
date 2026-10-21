@@ -1,0 +1,54 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}Analytics{% endblock %}
+{% block content %}
+{% macro metric(label, value, hint='', available=True) %}<div class="stat"><div class="label">{{ label }}</div><div class="value">{{ value if available else 'n/a' }}</div><div class="hint">{{ hint if available else 'Unavailable: no webhook events received yet' }}</div></div>{% endmacro %}
+<div class="page-head"><div><h1>Analytics</h1><p>Measured from your own records. Nothing here is estimated; unavailable metrics say so.</p></div>
+  <a class="btn" href="{{ url_for('analytics.index', format='csv', **f) }}">Download CSV report</a></div>
+<form method="get" class="toolbar card">
+  <div class="field"><label for="from">From</label><input id="from" type="date" name="from" value="{{ f.get('from', '') }}"></div>
+  <div class="field"><label for="to">To</label><input id="to" type="date" name="to" value="{{ f.get('to', '') }}"></div>
+  <div class="field"><label for="campaign">Campaign</label><select id="campaign" name="campaign"><option value="">All</option>{% for c in campaigns %}<option value="{{ c.id }}" {% if f.get('campaign') == c.id|string %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="template">Template</label><select id="template" name="template"><option value="">All</option>{% for t in templates %}<option value="{{ t.id }}" {% if f.get('template') == t.id|string %}selected{% endif %}>{{ t.name }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="tag">Segment (tag)</label><select id="tag" name="tag"><option value="">All</option>{% for t in tags %}<option {% if f.get('tag') == t.name %}selected{% endif %}>{{ t.name }}</option>{% endfor %}</select></div>
+  <div class="actions"><button class="btn primary" type="submit">Apply</button>{% if f %}<a class="btn" href="{{ url_for('analytics.index') }}">Clear</a>{% endif %}</div>
+</form>
+<h2>Email (real sending)</h2>
+<div class="grid cols-4">
+  {{ metric('Queued', real.queued, 'Waiting to send or retry') }}
+  {{ metric('Accepted by provider', real.accepted, 'Resend took the message') }}
+  {{ metric('Delivered to recipient servers', real.delivered, rate(real.delivered, real.accepted) ~ ' of accepted', real.webhooks_seen) }}
+  {{ metric('Hard / soft bounces', real.hard ~ ' / ' ~ real.soft, rate(real.hard, real.accepted) ~ ' hard', real.webhooks_seen) }}
+  {{ metric('Complaints', real.complaints, rate(real.complaints, real.accepted), real.webhooks_seen) }}
+  {{ metric('Unsubscribes', unsubscribes, 'Processed immediately') }}
+  {{ metric('Replies', replies, 'Marked manually or matched from inbound email') }}
+  {{ metric('Opens (approximate)', real.opened, 'Privacy features and image proxies distort opens', real.webhooks_seen) }}
+  {{ metric('Clicks', real.clicked, '', real.webhooks_seen) }}
+  {{ metric('Permanent failures', real.failed, 'Provider errors, not retried') }}
+  {{ metric('Retries', real.retries, 'Extra attempts after transient errors') }}
+  {{ metric('Blocked at send time', real.suppressed, 'Suppressed just before sending') }}
+</div>
+<p class="muted mt"><small>Inbox placement (inbox vs spam folder) can't be measured from sending data and isn't shown.</small></p>
+{% if sim.total %}<div class="notice sim"><p><strong>Simulated activity (sandbox, not real):</strong> {{ sim.total }} simulated messages · {{ sim.delivered }} simulated deliveries · {{ sim.hard }} simulated hard bounces · {{ sim.complaints }} simulated complaints.</p></div>{% endif %}
+<h2 class="mt">Contacts and verification</h2>
+<div class="grid cols-4">
+  {{ metric('Total contacts', contacts.total) }}
+  {{ metric('Imported', contacts.imported, 'From CSV files') }}
+  {{ metric('Added from discovery', contacts.discovered, contacts.found_by_discovery ~ ' published addresses found') }}
+  {{ metric('Duplicates skipped', contacts.duplicates_removed, contacts.invalid_rejected ~ ' invalid rows rejected') }}
+  {% for k in ['validated', 'invalid', 'risky', 'unknown', 'suppressed', 'unverified'] %}{{ metric(VERIFICATION[k], by_status.get(k, 0)) }}{% endfor %}
+  {{ metric('Addresses verified in jobs', verifications, 'Bulk checks completed') }}
+</div>
+<h2 class="mt">Campaigns and AI</h2>
+<div class="grid cols-2">
+  <section class="card"><h3>Campaigns by status</h3>{% for r in camp %}<p>{{ r.status.replace('_', ' ')|capitalize }}: {{ r.n }}</p>{% else %}<p class="muted">None yet.</p>{% endfor %}
+    <div class="table-wrap mt"><table><thead><tr><th>Campaign</th><th class="num">Recipients</th><th class="num">Accepted</th><th class="num">Delivered</th><th class="num">Hard bounces</th><th class="num">Replies</th></tr></thead><tbody>
+    {% for p in per_campaign %}<tr><td><a href="{{ url_for('campaigns.detail', campaign_id=p.id) }}">{{ p.name }}</a>{% if p.dry_run %} <span class="badge sim">sim</span>{% endif %}</td><td class="num">{{ p.recipients }}</td><td class="num">{{ p.stats.real.accepted }}</td>
+      <td class="num">{{ p.stats.real.delivered if p.stats.real.webhooks_seen else 'n/a' }}</td><td class="num">{{ p.stats.real.hard if p.stats.real.webhooks_seen else 'n/a' }}</td><td class="num">{{ p.stats.recipients.replied }}</td></tr>{% endfor %}</tbody></table></div></section>
+  <section class="card"><h3>AI usage and estimated cost</h3>
+    {% for r in ai %}<p><strong>{{ {'anthropic': 'Claude', 'rules': 'Rule-based (free)', 'mock': 'Mock'}.get(r.provider, r.provider) }}</strong>: {{ r.n }} requests{% if r.provider == 'anthropic' %} · {{ r.i }} input / {{ r.o }} output tokens · about ${{ '%.4f'|format((r.cost or 0) / 1000000) }}{% endif %}</p>{% else %}<p class="muted">No AI use yet.</p>{% endfor %}
+    <p class="muted"><small>AI cost is estimated from token counts at list prices ({% for m, p in prices.items() %}{{ m }}: ${{ p[0] }}/${{ p[1] }} per million in/out{{ '; ' if not loop.last }}{% endfor %}). Email sending costs depend on your Resend plan; check your Resend dashboard.</small></p></section>
+</div>
+<section class="card mt"><h2>Activity timeline</h2>
+  <ul class="timeline">{% for e in timeline %}<li><strong>{{ e.kind.replace('_', ' ')|capitalize }}</strong>{% if e.simulated %} <span class="badge sim">simulated</span>{% endif %} · <a href="{{ url_for('contacts.detail', contact_id=e.contact_id) }}">{{ e.email }}</a> <small class="muted">{{ e.created_at|dt }} UTC</small><br><small>{{ e.detail }}</small></li>{% else %}<li class="muted">No activity yet.</li>{% endfor %}</ul>
+</section>
+{% endblock %}

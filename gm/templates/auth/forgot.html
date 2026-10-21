@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}Reset your password{% endblock %}
+{% block public %}
+<div class="card">
+  <h1>Reset your password</h1>
+  <p class="muted">Enter your account's email address and we'll send a one-time reset link.</p>
+  <form method="post">{{ csrf() }}
+    <div class="field"><label for="email">Email</label><input id="email" type="email" name="email" autocomplete="email" required autofocus></div>
+    <button class="btn primary" type="submit">Send reset link</button>
+  </form>
+  <p class="mt"><a href="{{ url_for('auth.login') }}">Back to sign in</a></p>
+</div>
+{% endblock %}

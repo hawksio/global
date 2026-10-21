@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}Emails · {{ c.name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Emails in “{{ c.name }}”</h1><p>{{ STATUS_LABELS[c.status] }} · the first email plus up to 5 follow-ups. A follow-up goes only to people who haven't replied, unsubscribed, bounced or complained.</p></div>
+  <div class="actions"><a class="btn" href="{{ url_for('campaigns.detail', campaign_id=c.id) }}">Back to campaign</a>
+  {% if editable %}<form method="post">{{ csrf() }}<button class="btn primary" name="action" value="add">Add follow-up</button></form>{% endif %}</div></div>
+{% if not editable %}<div class="notice info"><p>Content is locked because the campaign has started{% if not can('edit_campaigns') %} or you have read-only access{% endif %}.</p></div>{% endif %}
+<div class="grid" style="grid-template-columns: minmax(0, 3fr) minmax(200px, 1fr)">
+<div>
+{% for s in steps %}
+<form method="post" class="card">{{ csrf() }}<input type="hidden" name="step_no" value="{{ s.step_no }}">
+  <h2>{{ 'Email 1 (first contact)' if s.step_no == 0 else 'Follow-up ' ~ s.step_no }}</h2>
+  {% if s.step_no > 0 %}<div class="field" style="max-width:240px"><label for="delay{{ s.step_no }}">Days after the previous email</label><input id="delay{{ s.step_no }}" type="number" name="delay_days" min="1" max="60" value="{{ s.delay_days }}" {% if not editable %}disabled{% endif %}></div>{% endif %}
+  <div class="field"><label for="subj{{ s.step_no }}">Subject</label><input id="subj{{ s.step_no }}" type="text" name="subject" value="{{ s.subject }}" {% if not editable %}disabled{% endif %}></div>
+  <div class="field"><label for="pre{{ s.step_no }}">Preview text</label><input id="pre{{ s.step_no }}" type="text" name="preheader" value="{{ s.preheader }}" {% if not editable %}disabled{% endif %}></div>
+  <div class="field"><label for="html{{ s.step_no }}">Body (HTML)</label><textarea id="html{{ s.step_no }}" class="code" name="html_body" {% if not editable %}disabled{% endif %}>{{ s.html_body }}</textarea></div>
+  <div class="field"><label for="txt{{ s.step_no }}">Plain text (optional)</label><textarea id="txt{{ s.step_no }}" name="text_body" rows="4" {% if not editable %}disabled{% endif %}>{{ s.text_body }}</textarea></div>
+  {% if editable %}<div class="actions"><button class="btn primary" name="action" value="save">Save</button>
+    {% if s.step_no > 0 %}<button class="btn danger" name="action" value="delete" data-confirm="Remove this follow-up?">Remove</button>{% endif %}</div>{% endif %}
+</form>
+{% endfor %}
+</div>
+<aside class="card"><h2>Fields</h2>{% for k, v in FIELDS.items() %}<p><button class="btn small" type="button" data-insert="{{ '{{' + k + '}}' }}">{{ '{{' + k + '}}' }}</button><br><small class="muted">{{ v }}</small></p>{% endfor %}</aside>
+</div>
+{% endblock %}

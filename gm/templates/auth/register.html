@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}Create your workspace{% endblock %}
+{% block public %}
+<div class="card">
+  <h1>Create your workspace</h1>
+  <p class="muted">Free to start. Everything begins in a safe sandbox: nothing is sent until you connect a sending service and approve a campaign.</p>
+  <form method="post">
+    {{ csrf() }}
+    <div class="field"><label for="full_name">Your name</label><input id="full_name" type="text" name="full_name" value="{{ form.get('full_name', '') }}" autocomplete="name" required></div>
+    <div class="field"><label for="company">Company or workspace name</label><input id="company" type="text" name="company" value="{{ form.get('company', '') }}" autocomplete="organization" required></div>
+    <div class="field"><label for="email">Work email</label><input id="email" type="email" name="email" value="{{ form.get('email', '') }}" autocomplete="email" required></div>
+    <div class="field"><label for="password">Password</label><input id="password" type="password" name="password" autocomplete="new-password" minlength="12" required>
+      <div class="help">At least 12 characters. A short sentence is easy to remember and hard to guess.</div></div>
+    <label class="check"><input type="checkbox" name="terms" required> <span>I will only email people I have a lawful reason to contact, honour every unsubscribe, and not use this service for spam or deception.</span></label>
+    <button class="btn primary" type="submit" style="width:100%;justify-content:center">Create workspace</button>
+  </form>
+  <p class="mt">Already have an account? <a href="{{ url_for('auth.login') }}">Sign in</a></p>
+</div>
+{% endblock %}

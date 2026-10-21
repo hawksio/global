@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}Map columns{% endblock %}
+{% block content %}
+{% set labels = {'email': 'Email', 'first_name': 'First name', 'last_name': 'Last name', 'company': 'Company', 'job_title': 'Job title', 'website': 'Website', 'phone': 'Phone', 'country': 'Country', 'industry': 'Industry', 'timezone': 'Time zone', 'notes': 'Notes', 'tags': 'Tags', 'source_url': 'Source URL'} %}
+<div class="page-head"><div><h1>Map columns · {{ imp.filename }}</h1><p>Step 2 of 3: {{ '{:,}'.format(imp.total_rows) }} rows found. Choose what each column contains; we guessed where we could.</p></div></div>
+<form method="post">{{ csrf() }}
+<section class="card"><h2>Columns and preview (first rows)</h2>
+  <div class="table-wrap"><table>
+    <thead><tr>{% for h in headers %}<th>
+      <label class="sr-only" for="col_{{ loop.index0 }}">Column {{ h }}</label>
+      <div class="muted" style="text-transform:none">{{ h or '(no header)' }}</div>
+      <select id="col_{{ loop.index0 }}" name="col_{{ loop.index0 }}" style="min-width:130px"><option value="">Ignore</option>
+        {% for k, v in labels.items() %}<option value="{{ k }}" {% if mapping.get(loop.index0|string) == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+    </th>{% endfor %}</tr></thead>
+    <tbody>{% for row in preview %}<tr>{% for cell in row %}<td><small>{{ cell[:60] }}</small></td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+<section class="card" style="max-width:860px"><h2>Where did these contacts come from?</h2>
+  <p class="muted">Recorded on every imported contact and checked before any campaign.</p>
+  <div class="field"><label for="source_detail">Source</label><input id="source_detail" type="text" name="source_detail" required placeholder="e.g. CRM export of existing customers, October 2026"></div>
+  <div class="field"><label for="purpose">Purpose</label><input id="purpose" type="text" name="purpose" required placeholder="e.g. Product update newsletter for customers"></div>
+  <div class="row">
+    <div class="field"><label for="recipient_type">Recipients are</label><select id="recipient_type" name="recipient_type">{% for k, v in RECIPIENT_TYPES.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="lawful_basis">Lawful basis</label><select id="lawful_basis" name="lawful_basis">{% for k, v in LAWFUL_BASES.items() %}<option value="{{ k }}" {% if k == 'unknown' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="tag">Tag all rows with</label><input id="tag" type="text" name="tag" placeholder="optional"></div>
+  </div>
+  <label class="check"><input type="checkbox" name="dns" checked> <span>Check each domain's mail routing (DNS) during the import. Free; adds a few seconds per new domain.</span></label>
+  <label class="check"><input type="checkbox" name="update_existing"> <span>For addresses already in your contacts, fill in empty fields from this file</span></label>
+  <div class="actions mt"><button class="btn primary" type="submit">Start import</button><a class="btn" href="{{ url_for('contacts.import_upload') }}">Cancel</a></div>
+</section>
+</form>
+{% endblock %}

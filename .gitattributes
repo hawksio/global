@@ -1,0 +1,4 @@
+# Keep LF line endings in the repository (deploys to Linux / cPanel)
+* text=auto eol=lf
+*.png binary
+*.ico binary

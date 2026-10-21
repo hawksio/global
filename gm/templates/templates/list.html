@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% from "_ui.html" import empty %}
+{% block title %}Templates{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Templates</h1><p>Reusable emails with personalisation fields, versions and approval.</p></div>
+  <div class="actions">{% if can('use_ai') %}<a class="btn" href="{{ url_for('ai.index') }}">Draft with AI</a>{% endif %}{% if can('edit_templates') %}<a class="btn primary" href="{{ url_for('templates.new') }}">New template</a>{% endif %}</div></div>
+<form method="get" class="toolbar"><div class="field" style="flex:1"><label for="q">Search</label><input id="q" type="search" name="q" value="{{ q }}"></div>
+  <div class="field"><label for="cat">Category</label><select id="cat" name="category" data-autosubmit><option value="">All</option>{% for c in CATEGORIES %}<option {% if category == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
+  <button class="btn" type="submit">Search</button><a class="btn" href="{{ url_for('templates.index', archived=1) }}">Archived</a></form>
+{% if templates %}
+<div class="table-wrap"><table><thead><tr><th>Name</th><th>Subject</th><th>Category</th><th>Version</th><th>Status</th><th>Updated</th></tr></thead><tbody>
+{% for t in templates %}<tr><td><a href="{{ url_for('templates.edit', template_id=t.id) }}">{{ t.name }}</a></td><td>{{ t.subject }}</td><td>{{ t.category }}</td><td>v{{ t.version }}</td>
+  <td>{% if t.approved_at %}<span class="badge ok">Approved</span>{% else %}<span class="badge">Not approved</span>{% endif %}{% if t.ai_generated %} <span class="badge info">AI</span>{% endif %}</td><td><small>{{ t.updated_at|dt }}</small></td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}{{ empty('No templates here', 'Create a template from scratch or let the AI assistant draft one for you to edit.', url_for('templates.new') if can('edit_templates') else None, 'New template') }}{% endif %}
+{% endblock %}

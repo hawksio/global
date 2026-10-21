@@ -1,0 +1,33 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf, vbadge, check_mark, jbadge %}
+{% block title %}Email verification{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Email verification</h1><p>Free local checks: syntax, normalisation, DNS mail routing, disposable and role-based domains, and your own bounce and unsubscribe history.</p></div></div>
+<div class="notice info"><p><strong>What “validated” means:</strong> the address passed every check we ran. It does <em>not</em> prove the mailbox exists or will accept email. We never probe mail servers to guess. A specialist verification provider can give stronger (still not certain) evidence; local checks are free.</p></div>
+<div class="grid cols-2">
+  <section class="card"><h2>Check one address</h2>
+    <form method="post">{{ csrf() }}
+      <div class="field"><label for="email">Email address</label><input id="email" type="text" name="email" value="{{ result.email if result else '' }}" required></div>
+      <button class="btn primary" type="submit">Check</button></form>
+    {% if result %}
+      <h3 class="mt">{{ vbadge(result.status) }} {{ result.summary }}</h3>
+      <ul class="checklist">{% for ch in result.checks %}<li>{{ check_mark(ch.result) }}<div><strong>{{ ch.stage }}. {{ ch.check }}</strong><br><small>{{ ch.detail }}</small><br><small class="muted">{{ ch.at }} UTC</small></div></li>{% endfor %}</ul>
+    {% endif %}
+  </section>
+  <section class="card"><h2>Validate a CSV file</h2>
+    <p class="muted">Checks every address without importing anything. You get a downloadable report and a cleaned file. The uploaded file is deleted afterwards.</p>
+    <form method="post" action="{{ url_for('verification.upload_csv') }}" enctype="multipart/form-data">{{ csrf() }}
+      <div class="field"><label for="file">CSV file (the email column is detected from its header)</label><input id="file" type="file" name="file" accept=".csv,.txt" required></div>
+      <label class="check"><input type="checkbox" name="dns" checked> <span>Include DNS mail-routing checks</span></label>
+      <button class="btn primary" type="submit">Validate file</button></form>
+    <h3 class="mt">Your contacts by result</h3>
+    <div class="table-wrap"><table><tbody>{% for k, label in VERIFICATION.items() %}<tr><td>{{ vbadge(k) }}</td><td class="num">{{ stats.get(k, 0) }}</td>
+      <td class="right">{% if stats.get(k, 0) and k in ('unverified', 'unknown', 'risky', 'validated') %}<form method="post" action="{{ url_for('verification.reverify') }}">{{ csrf() }}<input type="hidden" name="status" value="{{ k }}"><button class="btn small" type="submit">Re-check</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+  </section>
+</div>
+<section class="card"><h2>Verification jobs</h2>
+  <div class="table-wrap"><table><thead><tr><th>Job</th><th>Status</th><th class="num">Addresses</th><th>Started (UTC)</th></tr></thead><tbody>
+  {% for j in recent %}<tr><td><a href="{{ url_for('verification.job', job_id=j.id) }}">{{ 'CSV file' if j.kind == 'verify_csv' else 'Contacts' }} #{{ j.id }}</a></td><td>{{ jbadge(j.status) }}</td><td class="num">{{ j.total }}</td><td><small>{{ j.created_at|dt }}</small></td></tr>
+  {% else %}<tr><td colspan="4" class="muted">No jobs yet.</td></tr>{% endfor %}</tbody></table></div>
+</section>
+<p class="muted">Disposable-domain list: {{ '{:,}'.format(disposable.count) }} domains from {{ disposable.source }} ({{ disposable.get('license', '') }}), updated {{ disposable.get('updated', 'unknown') }}.</p>
+{% endblock %}

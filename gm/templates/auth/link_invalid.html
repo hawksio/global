@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block title %}Link expired{% endblock %}
+{% block public %}<div class="card"><h1>This link has expired or was already used</h1><p>Links work once and for a limited time. You can ask for a new one.</p><a class="btn primary" href="{{ url_for('auth.forgot') }}">Request a new link</a></div>{% endblock %}

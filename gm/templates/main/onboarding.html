@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}Set up your workspace{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Set up your workspace</h1><p>Two quick steps, then you can explore safely in the sandbox.</p></div></div>
+<nav class="tabs"><a href="{{ url_for('main.onboarding', step='company') }}" {% if step == 'company' %}aria-current="page"{% endif %}>1. Company</a>
+  <a href="{{ url_for('main.onboarding', step='sender') }}" {% if step == 'sender' %}aria-current="page"{% endif %}>2. Sender</a>
+  <a href="{{ url_for('main.overview') }}">3. Everything else (checklist)</a></nav>
+<section class="card" style="max-width:720px">
+{% if step == 'sender' %}
+  <h2>Who are your emails from?</h2>
+  <form method="post">{{ csrf() }}<input type="hidden" name="step" value="sender">
+    <div class="field"><label for="sender_name">Sender name</label><input id="sender_name" type="text" name="sender_name" value="{{ ws.sender_name }}" required><div class="help">Usually a person's name or your company name. Never someone you aren't.</div></div>
+    <div class="field"><label for="sender_email">Sender email</label><input id="sender_email" type="email" name="sender_email" value="{{ ws.sender_email }}" required><div class="help">Must be on a domain you verify with Resend (e.g. hello@yourcompany.com). Consider a subdomain such as news.yourcompany.com for marketing.</div></div>
+    <div class="field"><label for="reply_to">Reply-to (optional)</label><input id="reply_to" type="email" name="reply_to" value="{{ ws.reply_to }}"></div>
+    <button class="btn primary" type="submit">Save and continue</button>
+  </form>
+{% else %}
+  <h2>Your company</h2>
+  <form method="post">{{ csrf() }}<input type="hidden" name="step" value="company">
+    <div class="field"><label for="company_name">Company name</label><input id="company_name" type="text" name="company_name" value="{{ ws.company_name }}" required></div>
+    <div class="field"><label for="company_address">Postal address</label><textarea id="company_address" name="company_address" rows="3" required>{{ ws.company_address }}</textarea><div class="help">Shown in the footer of every marketing email. Laws such as CAN-SPAM require a valid physical address.</div></div>
+    <div class="field"><label for="website">Website</label><input id="website" type="url" name="website" value="{{ ws.website }}" placeholder="https://"></div>
+    <div class="field"><label for="timezone">Time zone</label><input id="timezone" type="text" name="timezone" value="{{ ws.timezone }}" placeholder="Europe/London"><div class="help">IANA name, e.g. Europe/London, America/New_York. Used for sending windows.</div></div>
+    <button class="btn primary" type="submit">Save and continue</button>
+  </form>
+{% endif %}
+</section>
+{% endblock %}

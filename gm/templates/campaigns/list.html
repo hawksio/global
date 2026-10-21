@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% from "_ui.html" import empty %}
+{% block title %}{{ 'Follow-up sequences' if sequences else 'Campaigns' }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ 'Follow-up sequences' if sequences else 'Campaigns' }}</h1>
+  <p>{% if sequences %}Campaigns with automatic follow-ups. Follow-ups stop on reply, unsubscribe, bounce, complaint or suppression.{% else %}Draft → checklist → approval → schedule → monitor.{% endif %}</p></div>
+  {% if can('edit_campaigns') %}<a class="btn primary" href="{{ url_for('campaigns.edit') }}">New campaign</a>{% endif %}</div>
+{% if not sequences %}<nav class="tabs"><a href="{{ url_for('campaigns.index') }}" {% if not status %}aria-current="page"{% endif %}>All</a>{% for k, v in STATUS_LABELS.items() %}<a href="{{ url_for('campaigns.index', status=k) }}" {% if status == k %}aria-current="page"{% endif %}>{{ v }}</a>{% endfor %}</nav>{% endif %}
+{% if campaigns %}
+<div class="table-wrap"><table><thead><tr><th>Name</th><th>Status</th><th class="num">Emails in sequence</th><th class="num">Recipients</th><th class="num">Sent / simulated</th><th>Updated</th></tr></thead><tbody>
+{% for c in campaigns %}<tr><td><a href="{{ url_for('campaigns.detail', campaign_id=c.id) }}">{{ c.name }}</a>{% if c.dry_run %} <span class="badge sim">simulation</span>{% endif %}{% if c.ai_generated %} <span class="badge info">AI content</span>{% endif %}</td>
+  <td><span class="badge {{ {'sending': 'info', 'completed': 'ok', 'paused': 'warn', 'cancelled': 'bad', 'pending_approval': 'warn'}.get(c.status, '') }}">{{ STATUS_LABELS[c.status] }}</span>{% if c.pause_reason and c.status == 'paused' %}<br><small>{{ c.pause_reason }}</small>{% endif %}</td>
+  <td class="num">{{ c.steps }}</td><td class="num">{{ c.recipients }}</td><td class="num">{{ c.sent }}</td><td><small>{{ c.updated_at|dt }}</small></td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}{{ empty('Nothing here yet', 'Create a campaign from an approved template. It starts in simulation mode so you can rehearse safely.', url_for('campaigns.edit') if can('edit_campaigns') else None, 'New campaign') }}{% endif %}
+{% endblock %}

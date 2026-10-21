@@ -1,0 +1,26 @@
+# Never commit secrets, local data or environments
+.env
+.env.*
+!.env.example
+instance/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.sqlite3
+*.sqlite3-*
+*.db
+*.log
+dev-admin.txt
+outbox/
+imports/
+reports/
+backups/
+.pytest_cache/
+.coverage
+htmlcov/
+.DS_Store
+Thumbs.db
+
+# Local editor / assistant settings
+.claude/

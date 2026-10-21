@@ -1,0 +1,48 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}{{ c.name if c else 'New campaign' }}{% endblock %}
+{% block content %}
+{% macro val(k, d='') %}{{ form[k] if form and k in form.keys() else d }}{% endmacro %}
+<div class="page-head"><div><h1>{{ 'Edit ' + c.name if c else 'New campaign' }}</h1><p>Choose who receives it and when. You'll review everything before anything is sent.</p></div></div>
+<form method="post" style="max-width:960px">{{ csrf() }}
+<section class="card"><h2>1. Basics</h2>
+  <div class="field"><label for="name">Campaign name (internal)</label><input id="name" type="text" name="name" value="{{ val('name') }}" required></div>
+  {% if not c %}<div class="field"><label for="template_id">First email from template</label><select id="template_id" name="template_id" required><option value="">Choose…</option>{% for t in templates %}<option value="{{ t.id }}">{{ t.name }}{% if not t.approved_at %} (not approved){% endif %}{% if t.ai_generated %} · AI{% endif %}</option>{% endfor %}</select>
+    <div class="help">The campaign gets its own copy, which you can edit and extend with follow-ups. {% if not templates %}<a href="{{ url_for('templates.new') }}">Create a template first.</a>{% endif %}</div></div>{% endif %}
+  <div class="row">
+    <div class="field"><label for="from_name">From name</label><input id="from_name" type="text" name="from_name" value="{{ val('from_name', workspace().sender_name) }}"></div>
+    <div class="field"><label for="from_email">From address</label><input id="from_email" type="email" name="from_email" value="{{ val('from_email', workspace().sender_email) }}"></div>
+    <div class="field"><label for="reply_to">Reply-to</label><input id="reply_to" type="email" name="reply_to" value="{{ val('reply_to', workspace().reply_to) }}"></div>
+  </div>
+  <label class="check"><input type="checkbox" name="dry_run" {% if (form['dry_run'] if form and 'dry_run' in form.keys() else 1) in (1, '1', 'on', True) %}checked{% endif %}> <span><strong>Simulation:</strong> run the whole campaign through the sending engine without sending anything. Every message is stored as “simulated”.</span></label>
+</section>
+<section class="card"><h2>2. Audience</h2>
+  <p class="muted">Only eligible contacts are included: active, not suppressed or opted out, with a recorded lawful basis (consumers need consent), not invalid or disposable. Risky addresses are excluded unless you include them below.</p>
+  <div class="row">
+    <div class="field"><label for="seg_tag">Tag</label><select id="seg_tag" name="seg_tag"><option value="">Any</option>{% for t in tags %}<option {% if segment.get('tag') == t.name %}selected{% endif %}>{{ t.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="seg_domain">Email domain</label><input id="seg_domain" type="text" name="seg_domain" value="{{ segment.get('domain', '') }}"></div>
+    <div class="field"><label for="seg_company">Company contains</label><input id="seg_company" type="text" name="seg_company" value="{{ segment.get('company', '') }}"></div>
+    <div class="field"><label for="seg_country">Country contains</label><input id="seg_country" type="text" name="seg_country" value="{{ segment.get('country', '') }}"></div>
+    <div class="field"><label for="seg_industry">Industry contains</label><input id="seg_industry" type="text" name="seg_industry" value="{{ segment.get('industry', '') }}"></div>
+    <div class="field"><label for="seg_source">Source</label><select id="seg_source" name="seg_source"><option value="">Any</option>{% for k, v in SOURCES.items() %}<option value="{{ k }}" {% if segment.get('source') == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="row">
+    <fieldset class="field"><legend>Verification result</legend>{% for k in ['validated', 'unknown', 'unverified', 'risky'] %}<label class="check"><input type="checkbox" name="seg_verification" value="{{ k }}" {% if k in segment.get('verification_status', []) %}checked{% endif %}> {{ VERIFICATION[k] }}</label>{% endfor %}</fieldset>
+    <fieldset class="field"><legend>Recipient type</legend>{% for k, v in RECIPIENT_TYPES.items() %}<label class="check"><input type="checkbox" name="seg_recipient_type" value="{{ k }}" {% if k in segment.get('recipient_type', []) %}checked{% endif %}> {{ v }}</label>{% endfor %}<small class="muted">None ticked = any</small></fieldset>
+    <fieldset class="field"><legend>Lawful basis</legend>{% for k, v in LAWFUL_BASES.items() if k != 'unknown' %}<label class="check"><input type="checkbox" name="seg_lawful_basis" value="{{ k }}" {% if k in segment.get('lawful_basis', []) %}checked{% endif %}> {{ v }}</label>{% endfor %}<small class="muted">None ticked = any recorded basis</small></fieldset>
+  </div>
+  <label class="check"><input type="checkbox" name="seg_exclude_role" {% if segment.get('exclude_role') %}checked{% endif %}> Exclude role addresses (info@, sales@…)</label>
+  <label class="check"><input type="checkbox" name="seg_include_risky" {% if segment.get('include_risky') %}checked{% endif %}> Include risky addresses (I have reviewed them)</label>
+  <input type="hidden" name="seg_exclude_sandbox" value="off"><label class="check"><input type="checkbox" name="seg_exclude_sandbox" {% if segment.get('exclude_sandbox') %}checked{% endif %}> Exclude sandbox sample contacts</label>
+</section>
+<section class="card"><h2>3. Timing and limits</h2>
+  <div class="row">
+    <div class="field"><label for="timezone">Time zone</label><input id="timezone" type="text" name="timezone" value="{{ val('timezone', workspace().timezone) }}"><div class="help">Contacts with their own time zone use theirs.</div></div>
+    <div class="field"><label for="ws_start">Send from (hour)</label><input id="ws_start" type="number" min="0" max="23" name="send_window_start" value="{{ val('send_window_start', 8) }}"></div>
+    <div class="field"><label for="ws_end">Until (hour)</label><input id="ws_end" type="number" min="1" max="24" name="send_window_end" value="{{ val('send_window_end', 18) }}"></div>
+    <div class="field"><label for="rate">Emails per minute</label><input id="rate" type="number" min="1" max="60" name="rate_per_minute" value="{{ val('rate_per_minute', 10) }}"><div class="help">Workspace limits: {{ workspace().hourly_send_limit }}/hour, {{ workspace().daily_send_limit }}/day.</div></div>
+  </div>
+  <fieldset><legend>Days</legend><div class="row">{% set days = (val('send_days', '0,1,2,3,4')|string).split(',') %}{% for d in DAYS %}<label class="check"><input type="checkbox" name="send_days" value="{{ loop.index0 }}" {% if loop.index0|string in days %}checked{% endif %}> {{ d }}</label>{% endfor %}</div></fieldset>
+</section>
+<div class="actions"><button class="btn primary" type="submit">Save campaign</button><a class="btn" href="{{ url_for('campaigns.detail', campaign_id=c.id) if c else url_for('campaigns.index') }}">Cancel</a></div>
+</form>
+{% endblock %}

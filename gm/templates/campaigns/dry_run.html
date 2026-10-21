@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Dry run · {{ c.name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Dry run · {{ c.name }}</h1><p>A rehearsal with no side effects: nothing is sent or changed.</p></div><a class="btn" href="{{ url_for('campaigns.detail', campaign_id=c.id) }}">Back to campaign</a></div>
+<div class="grid cols-4">
+  <div class="stat"><div class="label">Would receive email 1</div><div class="value">{{ report.eligible|length }}</div><div class="hint">of {{ report.matched }} matching contacts</div></div>
+  <div class="stat"><div class="label">Excluded</div><div class="value">{{ report.matched - report.eligible|length }}</div></div>
+  <div class="stat"><div class="label">Sending capacity</div><div class="value">{{ per_day }}/day</div><div class="hint">{{ per_hour }}/hour inside the window</div></div>
+  <div class="stat"><div class="label">Estimated time for email 1</div><div class="value">{{ '%.1f'|format(days) }} sending days</div><div class="hint">Frequency limits may add more</div></div>
+</div>
+<div class="grid cols-2 mt">
+  <section class="card"><h2>Exclusions</h2>{% for why, n in report.excluded.items() %}<p>{{ why }}: <strong>{{ n }}</strong></p>{% else %}<p class="muted">None.</p>{% endfor %}
+    <h3 class="mt">Sources of eligible recipients</h3>{% for k, n in report.sources.items() %}<p>{{ SOURCES.get(k, k) }}: {{ n }}</p>{% endfor %}
+    {% if report.role %}<p class="muted">{{ report.role }} are role addresses.</p>{% endif %}
+    {% if report.unverified %}<div class="notice warn"><p>{{ report.unverified }} eligible addresses have only partial checks. Run Email Verification first.</p></div>{% endif %}</section>
+  <section class="card"><h2>Sequence</h2>{% for s in steps %}<p><strong>{{ 'Email 1' if s.step_no == 0 else 'Follow-up ' ~ s.step_no ~ ' (+' ~ s.delay_days ~ ' days)' }}:</strong> {{ s.subject }}</p>{% endfor %}</section>
+</div>
+<section class="card"><h2>Personalised samples</h2>
+  {% for s in samples %}<h3>To {{ s.to }}: {{ s.subject }}</h3><iframe class="preview-frame" style="height:420px" title="Sample for {{ s.to }}" sandbox srcdoc="{{ s.html }}"></iframe>{% else %}<p class="muted">No eligible recipients to preview.</p>{% endfor %}
+</section>
+{% endblock %}

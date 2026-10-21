@@ -1,0 +1,49 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf, check_mark %}
+{% block title %}Deliverability Centre{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Deliverability Centre</h1><p>Sender authentication, sender health and automatic safety limits. A good score means your setup is right; it can't guarantee inbox placement.</p></div></div>
+{% if ws.sending_paused_reason %}<section class="notice bad"><p><strong>Sending is paused for this workspace.</strong> {{ ws.sending_paused_reason }}</p>
+  <p>Recommended: check recent bounces and complaints in Analytics, remove or re-verify the affected addresses, confirm recipients expect your email, then resume.</p>
+  {% if can('manage_settings') %}<form method="post" action="{{ url_for('deliverability.resume_sending') }}">{{ csrf() }}<label class="check"><input type="checkbox" name="confirm"> I've investigated the cause and fixed it</label><button class="btn" type="submit">Resume sending</button></form>{% endif %}</section>{% endif %}
+<div class="grid cols-2">
+<section class="card"><h2>Check your sending domain</h2>
+  <form method="post" class="toolbar">{{ csrf() }}<div class="field" style="flex:1"><label for="domain">Domain</label><input id="domain" type="text" name="domain" value="{{ domain }}" placeholder="yourcompany.com"></div><button class="btn primary" type="submit">Run checks now</button></form>
+  {% if check %}
+    <p><strong style="font-size:1.6rem">{{ check.score }}/100</strong> readiness for {{ domain }} · checked {{ check.checked_at|dt }} UTC</p>
+    <ul class="checklist">{% for key, r in check.results.items() %}<li>{{ check_mark('pass' if r.status == 'pass' else ('warn' if r.status == 'warn' else ('fail' if r.status == 'fail' else 'error'))) }}
+      <div><strong>{{ {'spf': 'SPF', 'dkim': 'DKIM', 'dmarc': 'DMARC', 'return_path': 'Return-path / bounce MX', 'mx': 'Inbound MX (replies)', 'provider': 'Resend domain verification'}[key] }}</strong> <small class="muted">({{ WEIGHTS[key] }} points)</small><br>
+      <small class="mono">{{ r.evidence }}</small><br><small>{{ r.advice }}</small></div></li>{% endfor %}</ul>
+    <p class="muted mt"><small>Score: pass = full points, warning = half, fail or unknown = none.</small></p>
+  {% else %}<p class="muted">No checks yet for this domain.</p>{% endif %}
+</section>
+<section class="card"><h2>Sender health · last 30 days</h2>
+  {% if h.sent %}
+  <table><tbody>
+    <tr><td>Real marketing messages accepted</td><td class="num">{{ h.sent }}</td></tr>
+    <tr><td>Hard bounce rate <small class="muted">(pause above {{ ws.bounce_pause_pct }}%)</small></td><td class="num"><span class="badge {{ 'bad' if h.bounce_pct > ws.bounce_pause_pct else ('warn' if h.bounce_pct > 2 else 'ok') }}">{{ h.bounce_pct }}%</span></td></tr>
+    <tr><td>Complaint rate <small class="muted">(pause above {{ ws.complaint_pause_pct }}%; Gmail/Yahoo want under 0.3%)</small></td><td class="num"><span class="badge {{ 'bad' if h.complaint_pct > ws.complaint_pause_pct else 'ok' }}">{{ h.complaint_pct }}%</span></td></tr>
+    <tr><td>Soft bounces</td><td class="num">{{ h.soft }}</td></tr>
+    <tr><td>Unsubscribes</td><td class="num">{{ h.unsubscribes }} ({{ h.unsub_pct }}%)</td></tr>
+    <tr><td>Permanent failures</td><td class="num">{{ h.failed }} ({{ h.failure_pct }}%)</td></tr>
+    <tr><td>Messages needing retries</td><td class="num">{{ h.retried }} ({{ h.retry_pct }}%)</td></tr>
+    <tr><td>Webhook events received</td><td class="num">{{ h.webhook_events }}{% if not h.webhook_events %} <span class="badge warn">set up the webhook</span>{% endif %}</td></tr>
+    <tr><td>Addresses on the suppression list</td><td class="num">{{ h.suppression_total }}</td></tr>
+  </tbody></table>
+  {% if h.daily %}<h3 class="mt">Volume, last 14 days</h3>{% set mx = h.daily|map(attribute='n')|max %}
+    {% for d in h.daily %}<div class="row" style="align-items:center;gap:8px"><small class="mono" style="width:90px">{{ d.day }}</small><div class="bar" style="flex:1"><span style="width:{{ (100 * d.n / mx)|int }}%;background:var(--brand)"></span></div><small style="width:40px" class="right">{{ d.n }}</small></div>{% endfor %}{% endif %}
+  {% else %}<p class="muted">No real marketing email in the last 30 days. Simulated sends are excluded.</p>{% endif %}
+  <p class="mt"><small>Unsubscribe links and one-click unsubscribe headers are added to every marketing email automatically, and opt-outs take effect immediately.</small></p>
+</section>
+</div>
+<section class="card"><h2>Setup guide</h2>
+  <ol>
+    <li>In Resend, add your domain; a sending subdomain such as <code>news.yourcompany.com</code> keeps marketing reputation separate. <a href="{{ DOCS.resend_domains }}" target="_blank" rel="noopener">Resend: domains</a></li>
+    <li>Copy the DNS records Resend shows (SPF and MX on <code>send.</code>, DKIM at <code>resend._domainkey</code>) into your DNS host (for cPanel: Zone Editor).</li>
+    <li>Add a DMARC record at <code>_dmarc</code>, starting with <code>p=none</code> and a report address. <a href="{{ DOCS.dmarc }}" target="_blank" rel="noopener">Resend: DMARC</a></li>
+    <li>Wait for DNS to update (minutes to hours), then run the checks above and verify the domain in Resend.</li>
+    <li>Start small: send to your most engaged, recently verified contacts first and grow volume gradually.</li>
+    <li>Follow the mailbox providers' sender rules: <a href="{{ DOCS.bulk_senders }}" target="_blank" rel="noopener">Google</a> · <a href="{{ DOCS.yahoo }}" target="_blank" rel="noopener">Yahoo</a>.</li>
+  </ol>
+  {% if history %}<h3>Check history</h3>{% for x in history %}<p><small>{{ x.checked_at|dt }} · {{ x.domain }} · {{ x.score }}/100</small></p>{% endfor %}{% endif %}
+</section>
+{% endblock %}

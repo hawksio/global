@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf, pager %}
+{% block title %}Suppression list{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Suppression list</h1><p>{{ '{:,}'.format(total) }} addresses that will never receive marketing email. Checked immediately before every send.</p></div>
+  <div class="actions">{% if can('export_contacts') %}<a class="btn" href="{{ url_for('suppression.export') }}">Export CSV</a>{% endif %}<a class="btn" href="{{ url_for('contacts.index') }}">Back to contacts</a></div></div>
+<div class="grid cols-4">{% for k, v in REASONS.items() %}<div class="stat"><div class="label">{{ v }}</div><div class="value">{{ counts.get(k, 0) }}</div></div>{% endfor %}</div>
+<div class="grid cols-2 mt">
+  <section class="card"><h2>Find</h2>
+    <form method="get" class="toolbar"><div class="field" style="flex:1"><label for="q">Address contains</label><input id="q" type="search" name="q" value="{{ q }}"></div>
+      <div class="field"><label for="reason">Reason</label><select id="reason" name="reason"><option value="">Any</option>{% for k, v in REASONS.items() %}<option value="{{ k }}" {% if reason == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+      <button class="btn" type="submit">Search</button></form></section>
+  {% if can('edit_contacts') %}<section class="card"><h2>Add addresses</h2>
+    <form method="post" action="{{ url_for('suppression.add') }}" enctype="multipart/form-data">{{ csrf() }}
+      <div class="field"><label for="emails">Addresses (one per line or comma separated)</label><textarea id="emails" name="emails" rows="3"></textarea></div>
+      <div class="field"><label for="sfile">…or upload a list</label><input id="sfile" type="file" name="file" accept=".csv,.txt"></div>
+      <button class="btn" type="submit">Suppress</button></form></section>{% endif %}
+</div>
+<div class="table-wrap"><table><thead><tr><th>Address</th><th>Reason</th><th>Source</th><th>Added (UTC)</th><th></th></tr></thead><tbody>
+{% for r in rows %}<tr><td>{{ r.email_normalized }}{% if r.simulated %} <span class="badge sim">simulated</span>{% endif %}</td><td><span class="badge {{ 'bad' if r.reason in ('complaint', 'hard_bounce') else 'warn' }}">{{ REASONS[r.reason] }}</span></td><td><small>{{ r.source }}</small></td><td><small>{{ r.created_at|dt }}</small></td>
+  <td>{% if can('manage_settings') %}<form method="post" action="{{ url_for('suppression.remove') }}" data-confirm="Remove {{ r.email_normalized }} from the suppression list? Only do this if the person clearly asked to hear from you again.">{{ csrf() }}<input type="hidden" name="email" value="{{ r.email_normalized }}"><input type="hidden" name="confirm" value="yes"><button class="btn small" type="submit">Remove</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">The suppression list is empty.</td></tr>{% endfor %}
+</tbody></table></div>
+{{ pager(page, pages, 'suppression.index', {'q': q, 'reason': reason}) }}
+{% endblock %}

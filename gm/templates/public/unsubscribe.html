@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}Unsubscribe{% endblock %}
+{% block public %}
+<div class="card">
+  {% if state == 'invalid' %}
+    <h1>This link isn't valid</h1><p>It may have been copied incompletely. Reply to the email you received and ask to be removed; the sender must honour it.</p>
+  {% elif state == 'done' %}
+    <h1>You're unsubscribed</h1><p>{{ email }} will not receive further marketing email from {{ ws.company_name or ws.name }}.</p>
+  {% else %}
+    <h1>Unsubscribe</h1><p>Stop marketing email from <strong>{{ ws.company_name or ws.name }}</strong> to <strong>{{ email }}</strong>?</p>
+    <form method="post">{{ csrf() }}<button class="btn primary" type="submit">Unsubscribe</button></form>
+  {% endif %}
+</div>
+{% endblock %}

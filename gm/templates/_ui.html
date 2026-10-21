@@ -1,0 +1,59 @@
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+
+{% macro vbadge(status) -%}
+  {%- set cls = {'validated': 'ok', 'invalid': 'bad', 'risky': 'warn', 'unknown': '', 'suppressed': 'bad', 'unverified': ''}.get(status, '') -%}
+  <span class="badge {{ cls }}" title="{{ {'validated': 'Passed the local checks performed. Not proof the mailbox exists.', 'invalid': 'Reliable evidence the address or domain cannot receive email', 'risky': 'A warning needs review before sending', 'unknown': 'The checks could not decide (e.g. DNS unavailable)', 'suppressed': 'Sending is blocked by your suppression rules', 'unverified': 'Not checked yet'}.get(status, '') }}">{{ VERIFICATION.get(status, status) }}</span>
+{%- endmacro %}
+
+{% macro sbadge(status) -%}
+  {%- set cls = {'active': 'ok', 'unsubscribed': 'warn', 'bounced': 'bad', 'complained': 'bad', 'suppressed': 'bad'}.get(status, '') -%}
+  <span class="badge {{ cls }}">{{ STATUSES.get(status, status) }}</span>
+{%- endmacro %}
+
+{% macro mbadge(status) -%}
+  {%- set labels = {'queued': 'Queued', 'accepted': 'Accepted by provider', 'delivered': 'Delivered to server', 'delivery_delayed': 'Delayed', 'bounced': 'Hard bounce', 'soft_bounced': 'Soft bounce', 'complained': 'Complaint', 'failed': 'Failed', 'cancelled': 'Cancelled', 'suppressed': 'Suppressed', 'simulated': 'SIMULATED'} -%}
+  {%- set cls = {'accepted': 'info', 'delivered': 'ok', 'delivery_delayed': 'warn', 'bounced': 'bad', 'soft_bounced': 'warn', 'complained': 'bad', 'failed': 'bad', 'suppressed': 'bad', 'simulated': 'sim'}.get(status, '') -%}
+  <span class="badge {{ cls }}">{{ labels.get(status, status) }}</span>
+{%- endmacro %}
+
+{% macro jbadge(status) -%}
+  <span class="badge {{ {'completed': 'ok', 'failed': 'bad', 'running': 'info', 'cancelled': 'warn'}.get(status, '') }}">{{ status|capitalize }}</span>
+{%- endmacro %}
+
+{% macro empty(title, text, url=None, label=None) %}
+  <div class="empty card"><h3>{{ title }}</h3><p>{{ text }}</p>{% if url %}<a class="btn primary" href="{{ url }}">{{ label }}</a>{% endif %}</div>
+{% endmacro %}
+
+{% macro pager(page, pages, endpoint, args) %}
+  {% if pages > 1 %}
+  <nav class="pager" aria-label="Pages">
+    {% if page > 1 %}<a class="btn small" href="{{ url_for(endpoint, page=page-1, **args) }}">← Previous</a>{% endif %}
+    <span>Page {{ page }} of {{ pages }}</span>
+    {% if page < pages %}<a class="btn small" href="{{ url_for(endpoint, page=page+1, **args) }}">Next →</a>{% endif %}
+  </nav>
+  {% endif %}
+{% endmacro %}
+
+{% macro job_progress(job, reload=True) %}
+  {% set pct = ((100 * job.progress / job.total)|round|int) if job.total else (100 if job.status == 'completed' else 0) %}
+  <div {% if job.status in ('queued', 'running') %}data-job="{{ url_for('verification.job_json', job_id=job.id) }}"{% if reload %} data-reload{% endif %}{% endif %}>
+    <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ pct }}"><span style="width: {{ pct }}%"></span></div>
+    <p class="muted" style="margin-top:6px" data-job-text>{{ job.message or job.status|capitalize }}{% if job.total %} ({{ pct }}%){% endif %}</p>
+    {% if job.status in ('queued', 'running') %}
+    <form method="post" action="{{ url_for('verification.job_cancel', job_id=job.id) }}" data-confirm="Cancel this job? Work already finished is kept.">
+      {{ csrf() }}<button class="btn small danger" type="submit">Cancel</button>
+      {% if job.status == 'queued' %}<span class="muted"> Waiting for the background worker (it runs every minute).</span>{% endif %}
+    </form>
+    {% endif %}
+    {% if job.error %}<div class="notice bad mt">{{ job.error }}</div>{% endif %}
+  </div>
+{% endmacro %}
+
+{% macro sort_link(label, key, sort, dir, args) %}
+  {% set nd = 'asc' if sort == key and dir == 'desc' else 'desc' %}
+  <a href="{{ url_for(request.endpoint, sort=key, dir=nd, **args) }}">{{ label }}{% if sort == key %} {{ '▲' if dir == 'asc' else '▼' }}{% endif %}</a>
+{% endmacro %}
+
+{% macro check_mark(result) -%}
+  <span class="mark {{ {'pass': 'ok', 'fail': 'bad', 'warn': 'warn', 'error': 'warn'}.get(result, '') }}">{{ {'pass': '✓', 'fail': '✕', 'warn': '!', 'error': '?', 'skip': '–'}.get(result, '?') }}</span>
+{%- endmacro %}

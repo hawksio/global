@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}Choose a password{% endblock %}
+{% block public %}
+<div class="card">
+  <h1>{{ 'Welcome! Choose a password' if invited else 'Choose a new password' }}</h1>
+  <p class="muted">For {{ user.email }}</p>
+  <form method="post">{{ csrf() }}
+    <div class="field"><label for="password">New password</label><input id="password" type="password" name="password" minlength="12" autocomplete="new-password" required autofocus>
+      <div class="help">At least 12 characters.</div></div>
+    <button class="btn primary" type="submit">Save password</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf, jbadge %}
+{% block title %}Background jobs{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Background jobs</h1><p>Processed by <code>flask --app gm worker --once</code> (cron) or the development worker thread.</p></div><a class="btn" href="{{ url_for('admin.system') }}">Back</a></div>
+<nav class="tabs"><a href="{{ url_for('admin.system_jobs') }}" {% if not status %}aria-current="page"{% endif %}>All</a>{% for s in ['queued', 'running', 'failed', 'completed', 'cancelled'] %}<a href="{{ url_for('admin.system_jobs', status=s) }}" {% if status == s %}aria-current="page"{% endif %}>{{ s|capitalize }}</a>{% endfor %}</nav>
+<div class="table-wrap"><table><thead><tr><th>#</th><th>Kind</th><th>Workspace</th><th>Status</th><th>Progress</th><th>Attempts</th><th>Created (UTC)</th><th>Error</th><th></th></tr></thead><tbody>
+{% for j in rows %}<tr><td>{{ j.id }}</td><td>{{ j.kind }}</td><td>{{ j.workspace_id or '—' }}</td><td>{{ jbadge(j.status) }}</td><td>{{ j.progress }}/{{ j.total }}</td><td>{{ j.attempts }}/{{ j.max_attempts }}</td><td><small>{{ j.created_at|dt }}</small></td><td><small>{{ j.error[:120] }}</small></td>
+  <td><form method="post" action="{{ url_for('admin.system_job', job_id=j.id) }}" class="actions">{{ csrf() }}{% if j.status == 'failed' %}<button class="btn small" name="action" value="retry">Retry</button>{% endif %}{% if j.status in ('queued', 'running') %}<button class="btn small danger" name="action" value="cancel">Cancel</button>{% endif %}</form></td></tr>
+{% else %}<tr><td colspan="9" class="muted">No jobs.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Search{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Search</h1><p>{% if q|length < 2 %}Type at least two characters.{% else %}Results for “{{ q }}”{% endif %}</p></div></div>
+<div class="grid cols-3">
+  <section class="card"><h2>Contacts</h2>{% for c in results.contacts %}<p><a href="{{ url_for('contacts.detail', contact_id=c.id) }}">{{ c.email }}</a><br><small>{{ c.first_name }} {{ c.last_name }} {{ c.company }}</small></p>{% else %}<p class="muted">None found.</p>{% endfor %}</section>
+  <section class="card"><h2>Campaigns</h2>{% for c in results.campaigns %}<p><a href="{{ url_for('campaigns.detail', campaign_id=c.id) }}">{{ c.name }}</a> <span class="badge">{{ c.status }}</span></p>{% else %}<p class="muted">None found.</p>{% endfor %}</section>
+  <section class="card"><h2>Templates</h2>{% for t in results.templates %}<p><a href="{{ url_for('templates.edit', template_id=t.id) }}">{{ t.name }}</a><br><small>{{ t.subject }}</small></p>{% else %}<p class="muted">None found.</p>{% endfor %}</section>
+</div>
+{% endblock %}

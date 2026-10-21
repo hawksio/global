@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}Verify your email{% endblock %}
+{% block public %}
+<div class="card">
+  <h1>Check your email</h1>
+  <p>If {{ hint or 'the address' }} is waiting for verification, we've sent it a 6-digit code. It expires in 30 minutes.</p>
+  <form method="post">
+    {{ csrf() }}
+    <div class="field"><label for="code">Verification code</label><input id="code" type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required autofocus></div>
+    <button class="btn primary" type="submit">Verify</button>
+  </form>
+  <form method="post" class="mt">{{ csrf() }}<input type="hidden" name="action" value="resend"><button class="btn link" type="submit">Send a new code</button></form>
+  {% if not production %}<p class="notice sim mt">Development: codes are written to <code>instance/outbox/</code> unless a transactional sending key is set.</p>{% endif %}
+</div>
+{% endblock %}

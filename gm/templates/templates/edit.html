@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
+{% block title %}{{ t.name if t else 'New template' }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ t.name if t else 'New template' }}</h1>
+  {% if t %}<p>Version {{ t.version }} · {% if t.approved_at %}<span class="badge ok">Approved</span>{% else %}<span class="badge">Not approved</span>{% endif %}{% if t.ai_generated %} <span class="badge info">AI-generated: review carefully</span>{% endif %}</p>{% endif %}</div>
+  {% if t %}<div class="actions"><a class="btn" href="{{ url_for('templates.preview', template_id=t.id) }}">Preview &amp; test</a>
+    {% if can('edit_templates') %}<form method="post" action="{{ url_for('templates.duplicate', template_id=t.id) }}">{{ csrf() }}<button class="btn" type="submit">Duplicate</button></form>
+    <form method="post" action="{{ url_for('templates.archive', template_id=t.id) }}">{{ csrf() }}<button class="btn" type="submit">{{ 'Restore' if t.archived else 'Archive' }}</button></form>{% endif %}
+    {% if can('approve_campaigns') and not t.approved_at %}<form method="post" action="{{ url_for('templates.approve', template_id=t.id) }}">{{ csrf() }}<button class="btn primary" type="submit">Approve</button></form>{% endif %}</div>{% endif %}</div>
+<div class="grid" style="grid-template-columns: minmax(0, 3fr) minmax(220px, 1fr)">
+<form method="post" class="card" action="{{ url_for('templates.edit', template_id=t.id) if t else url_for('templates.new') }}">{{ csrf() }}
+  <div class="row">
+    <div class="field" style="flex:2"><label for="name">Template name</label><input id="name" type="text" name="name" value="{{ form['name'] if form and 'name' in form.keys() else '' }}" required></div>
+    <div class="field"><label for="category">Category</label><select id="category" name="category">{% for c in CATEGORIES %}<option {% if form and 'category' in form.keys() and form['category'] == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="field"><label for="subject">Subject line</label><input id="subject" type="text" name="subject" value="{{ form['subject'] if form and 'subject' in form.keys() else '' }}" required><div class="help">Honest and specific. No fake “Re:” or false urgency.</div></div>
+  <div class="field"><label for="preheader">Preview text (optional)</label><input id="preheader" type="text" name="preheader" value="{{ form['preheader'] if form and 'preheader' in form.keys() else '' }}"></div>
+  <div class="field"><label for="html_body">Email body (HTML)</label><textarea id="html_body" class="code" name="html_body">{{ form['html_body'] if form and 'html_body' in form.keys() else '<p>Hi {{first_name|there}},</p>\n<p></p>\n<p>Best regards,<br>{{sender_name}}</p>' }}</textarea>
+    <div class="help">Scripts, forms and embedded frames are removed. Your company address and an unsubscribe link are added automatically.</div></div>
+  <div class="field"><label for="text_body">Plain-text version (optional; generated from the HTML if empty)</label><textarea id="text_body" name="text_body" rows="6">{{ form['text_body'] if form and 'text_body' in form.keys() else '' }}</textarea></div>
+  {% if can('edit_templates') %}<button class="btn primary" type="submit">Save{{ ' as a new version' if t else '' }}</button>{% endif %}
+</form>
+<aside>
+  <section class="card"><h2>Personalisation fields</h2><p class="muted"><small>Click to insert at the cursor. Add a fallback after a bar: <code>{{ '{{first_name|there}}' }}</code></small></p>
+    {% for k, v in FIELDS.items() %}<p><button class="btn small" type="button" data-insert="{{ '{{' + k + '}}' }}">{{ '{{' + k + '}}' }}</button><br><small class="muted">{{ v }}</small></p>{% endfor %}</section>
+  {% if versions %}<section class="card"><h2>Versions</h2>{% for v in versions %}<p>v{{ v.version }} · <small>{{ v.created_at|dt }} {{ v.full_name or '' }}</small><br>
+    <a href="{{ url_for('templates.preview', template_id=t.id, version=v.version) }}">Preview</a>{% if v.version != t.version and can('edit_templates') %} · <form class="inline" method="post" action="{{ url_for('templates.restore', template_id=t.id, version=v.version) }}" data-confirm="Restore version {{ v.version }}? It becomes a new version.">{{ csrf() }}<button class="btn link" type="submit">Restore</button></form>{% endif %}</p>{% endfor %}</section>{% endif %}
+</aside>
+</div>
+{% endblock %}

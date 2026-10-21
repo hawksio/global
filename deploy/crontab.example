@@ -1,0 +1,8 @@
+# cPanel → Cron Jobs (replace CPANELUSER and the Python version). Logs go outside public_html.
+# Background jobs: imports, verification, discovery, campaign sending, retries, retention. Every minute
+# (if your host only allows every 5 minutes, sending still works, just in bigger steps).
+* * * * * cd /home/CPANELUSER/global-marketing && /home/CPANELUSER/virtualenv/global-marketing/3.12/bin/flask --app gm worker --once --budget 50 >> /home/CPANELUSER/logs/gm-worker.log 2>&1
+# Daily database backup at 03:15 (copies go to GM_INSTANCE_DIR/backups; download them off the server regularly)
+15 3 * * * cd /home/CPANELUSER/global-marketing && /home/CPANELUSER/virtualenv/global-marketing/3.12/bin/flask --app gm backup >> /home/CPANELUSER/logs/gm-backup.log 2>&1
+# Weekly refresh of the disposable-domain list (optional)
+30 4 * * 1 cd /home/CPANELUSER/global-marketing && /home/CPANELUSER/virtualenv/global-marketing/3.12/bin/flask --app gm update-disposable >> /home/CPANELUSER/logs/gm-worker.log 2>&1
