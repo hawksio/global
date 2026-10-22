@@ -5,7 +5,7 @@
 {% set task = i.task or request.args.get('task', 'draft') %}
 <div class="page-head"><div><h1>Writing assistant</h1>
   <p>Provider: {% if provider_name == 'anthropic' %}<span class="badge ok">Claude ({{ config.AI_MODEL }})</span> · {{ usage }} of {{ limit }} requests used this month{% elif provider_name == 'mock' %}<span class="badge sim">Sandbox mock</span>{% else %}<span class="badge">Free rule-based assistant</span> · connect an AI provider under Connections for better drafts{% endif %}</p></div></div>
-<div class="notice info"><p>The assistant uses only what you tell it. It won't invent facts about recipients, testimonials, results or promises; it leaves <code>[placeholders]</code> instead. Everything it writes is saved unapproved, and campaigns need a person's approval.</p></div>
+<div class="notice info"><p>The assistant uses only what you tell it. It won't invent facts about recipients, testimonials, results or promises; anything you don't provide is simply left out, so drafts are ready to send. Everything it writes is saved unapproved, and campaigns need a person's approval.</p></div>
 <nav class="tabs">{% for k, label in tasks %}<a href="{{ url_for('ai.index', task=k) }}" {% if task == k %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}</nav>
 <div class="grid cols-2">
 <section class="card">

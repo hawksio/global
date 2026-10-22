@@ -424,7 +424,9 @@ class Assistant(AppCase):
                                       "goal": "a call", "tone": "professional"})
         page = r.get_data(as_text=True)
         self.assertIn("rule-based", page)
-        self.assertIn("[one concrete, accurate benefit]", page)
+        self.assertIn("We help shops with courier service.", page)
+        draft = page[page.index('id="d-body"'):page.index("</textarea>", page.index('id="d-body"'))]
+        self.assertNotIn("[", draft, "drafts are complete: no [placeholders] to fill in")
         self.post("/assistant/save", {"subject": "Hi {{company}}", "body": "Hi {{first_name|there}},\n\nText.", "name": "AI1"})
         from gm.db import query
         t = query("SELECT * FROM templates WHERE name = 'AI1'", one=True)
@@ -470,7 +472,9 @@ class Assistant(AppCase):
         found = {f["title"] for f in content_check("RE: URGENT ACT NOW!!!", '<p>Guaranteed results [benefit]</p>'
                                                    '<a href="http://bit.ly/x">www.mybank.com</a>')}
         self.assertTrue(any("Misleading subject" in t for t in found))
-        self.assertTrue(any("Unfilled placeholder" in t for t in found))
+        self.assertTrue(any("square brackets" in t for t in found))
+        brackets = [f for f in content_check("Hi", "<p>Hello [note]</p>") if "square brackets" in f["title"]]
+        self.assertEqual(brackets[0]["level"], "warn", "bracketed text is a hint, never a blocking error")
         self.assertTrue(any("Link shortener" in t for t in found))
         self.assertTrue(any("doesn't match" in t for t in found))
         self.assertTrue(any("evidence" in t for t in found))

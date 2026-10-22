@@ -9,8 +9,7 @@ Providers (GM_AI_PROVIDER):
   auto      - anthropic when a key is configured, otherwise rules.
 
 Guard rails: the model is told never to invent facts about the recipient or their company, relationships,
-testimonials, statistics or financial promises, and to leave [square-bracket placeholders] where information is
-missing. Generated content is saved unapproved and campaigns built from it need human approval.
+testimonials, statistics or financial promises; missing details are simply left out, so drafts are ready to send. Generated content is saved unapproved and campaigns built from it need human approval.
 """
 import re
 from dataclasses import dataclass, field
@@ -28,7 +27,8 @@ PRICE_PER_MTOK = {"claude-opus-5-5": (4.0, 20.0), "claude-sonnet-5-5": (2.0, 10.
 SYSTEM = """You help a business write honest, professional B2B email. Rules you must follow:
 - Use only facts the user gave you. Never invent details about the recipient, their company, a prior relationship or
   conversation, customer names, testimonials, statistics, awards, prices, guarantees or financial promises.
-- Where a useful detail is missing, write a short placeholder in square brackets, e.g. [one concrete benefit].
+- Write a complete email that is ready to send. If a detail is missing, leave it out; never use placeholders or
+  square brackets, and never fill the gap with invented facts.
 - No deceptive subject lines (no fake "Re:" or "Fwd:", no false urgency, no clickbait), no spammy wording, no ALL CAPS.
 - Keep the sender's identity clear. Do not impersonate anyone.
 - You may use these personalisation fields exactly as written: {{first_name|there}}, {{company}}, {{sender_name}},
@@ -96,12 +96,12 @@ class MockProvider:
 
     def complete(self, prompt, max_tokens=0):
         if "SUBJECT LINES" in prompt:
-            text = "[Mock AI] A quick idea for {{company}}\n[Mock AI] Question about your [area]\n[Mock AI] Could this help {{company}}?"
+            text = "Mock AI: a quick idea for {{company}}\nMock AI: a question for {{company}}\nMock AI: could this help {{company}}?"
         elif "SUMMARY" in prompt:
-            text = "[Mock AI] This is a sandbox summary. Connect an AI provider for real analysis."
+            text = "Mock AI: this is a practice summary. Connect an AI provider for real analysis."
         else:
-            text = ("SUBJECT: [Mock AI] A quick idea for {{company}}\n---\nHi {{first_name|there}},\n\n[Mock AI] This is "
-                    "sample text from the sandbox assistant. [one concrete benefit]\n\nBest regards,\n{{sender_name}}")
+            text = ("SUBJECT: Mock AI: a quick idea for {{company}}\n---\nHi {{first_name|there}},\n\nThis is sample text "
+                    "from the practice assistant.\n\nBest regards,\n{{sender_name}}")
         return AIResult(text=text, provider=self.name, model="mock", notes=["Sandbox mock output (not written by an AI model)."])
 
 
@@ -221,32 +221,55 @@ def rewrite_text(text, tone):
     return proofread_text(out)[0]
 
 
+def _sentence(text):
+    text = (text or "").strip()
+    return (text[:1].upper() + text[1:] + ("" if text.endswith((".", "!", "?")) else ".")) if text else ""
+
+
 def rules_draft(i):
-    offer = i.get("offer") or "[what you offer]"
-    audience = i.get("audience") or "[the kind of business you are writing to]"
-    goal = i.get("goal") or "a short call"
-    benefit = i.get("benefit") or "[one concrete, accurate benefit]"
+    """A complete, ready-to-send draft built only from what the user typed. Missing details are left out rather than
+    filled with placeholders or invented facts."""
+    offer = (i.get("offer") or "").strip().rstrip(".")
+    audience = (i.get("audience") or "").strip().rstrip(".")
+    goal = (i.get("goal") or "a short call").strip().rstrip(".?")
+    benefit = _sentence(i.get("benefit"))
     greeting = "Dear {{first_name|there}}," if i.get("tone") == "formal" else "Hi {{first_name|there}},"
-    body = (f"{greeting}\n\nI'm {{{{sender_name}}}} from {{{{sender_company}}}}. We help {audience} with {offer}.\n\n"
-            f"{benefit}\n\nWould you be open to {goal}? If this isn't relevant to {{{{company}}}}, just let me know and "
-            f"I won't follow up.\n\n{'Kind regards' if i.get('tone') == 'formal' else 'Best regards'},\n{{{{sender_name}}}}")
+    if offer and audience:
+        intro = f"We help {audience} with {offer}."
+    elif offer:
+        intro = f"We offer {offer}."
+    else:
+        intro = "I'd like to introduce our services."
+    lines = [greeting, "", f"I'm {{{{sender_name}}}} from {{{{sender_company}}}}. {intro}", ""]
+    if benefit:
+        lines += [benefit, ""]
+    lines += [f"Would you be open to {goal}? If this isn't relevant to {{{{company}}}}, just let me know and I won't follow up.",
+              "", f"{'Kind regards' if i.get('tone') == 'formal' else 'Best regards'},", "{{sender_name}}"]
     subject = rules_subjects(i)[0]
-    return f"SUBJECT: {subject}\n---\n{rewrite_text(body, i.get('tone', 'professional'))}"
+    return f"SUBJECT: {subject}\n---\n{rewrite_text(chr(10).join(lines), i.get('tone', 'professional'))}"
 
 
 def rules_subjects(i):
-    offer = (i.get("offer") or "your team").strip().rstrip(".")
+    offer = (i.get("offer") or "").strip().rstrip(".")
+    if not offer:
+        return ["A quick idea for {{company}}", "A question for {{company}}", "{{first_name|Hello}}, a quick question",
+                "Could we help {{company}}?", "Introducing {{sender_company}}"]
     short = offer if len(offer) < 40 else offer[:37].rsplit(" ", 1)[0]
     return [f"{short[:1].upper()}{short[1:]} for {{{{company}}}}", f"Question about {short}",
             f"An idea for {{{{company}}}}", f"Could {short} help {{{{company}}}}?", f"{{{{first_name|Hello}}}}, a quick question"]
 
 
 def rules_followup(i):
-    return ("SUBJECT: Following up: {original}\n---\nHi {{{{first_name|there}}}},\n\nI'm following up on my note about "
-            "{offer}. I know inboxes get busy, so I'll keep this short: {benefit}\n\nIs this worth a conversation, or "
-            "should I close the loop? Either answer is fine.\n\nBest regards,\n{{{{sender_name}}}}").format(
-        original=i.get("subject") or "my last email", offer=i.get("offer") or "[your offer]",
-        benefit=i.get("benefit") or "[one concrete, accurate benefit]")
+    offer = (i.get("offer") or "").strip().rstrip(".")
+    about = f"about {offer}" if offer else ""
+    benefit = _sentence(i.get("benefit"))
+    body = ["Hi {{first_name|there}},", "", f"I'm following up on my earlier note{(' ' + about) if about else ''}. "
+            "I know inboxes get busy, so I'll keep this short."]
+    if benefit:
+        body += ["", benefit]
+    body += ["", "Is this worth a quick conversation, or should I close the loop? Either answer is fine.", "",
+             "Best regards,", "{{sender_name}}"]
+    return f"SUBJECT: Following up: {i.get('subject') or 'my last email'}\n---\n" + "\n".join(body)
 
 
 def _local(text, notes=None):
@@ -297,7 +320,7 @@ def content_check(subject, html_body, text_body=""):
             add("warn", f"Claim needs evidence: “{m.group(0)}”",
                 "Only keep claims you can substantiate. Never invent results, testimonials or guarantees.")
     if re.search(r"\[[^\]]{3,80}\]", body_text):
-        add("error", "Unfilled placeholder", "Replace every [square-bracket placeholder] with real information or remove it.")
+        add("warn", "Text in [square brackets]", "If this is a note to yourself, replace it before sending. Otherwise you can ignore this.")
     for m in re.finditer(r"<a\s[^>]*href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>", html_body or "", re.I | re.S):
         href, label = m.group(1).strip(), re.sub(r"<[^>]+>", "", m.group(2)).strip()
         if href.startswith(("{{", "mailto:", "tel:", "#")):

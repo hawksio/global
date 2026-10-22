@@ -248,7 +248,8 @@ def steps(campaign_id):
                 first = steps_of(c["id"])[0]
                 execute("INSERT INTO campaign_steps (campaign_id, step_no, delay_days, subject, html_body, text_body) "
                         "VALUES (?, ?, 3, ?, ?, '')", (c["id"], n, "Re-checking in: " + first["subject"][:200],
-                                                       "<p>Hi {{first_name|there}},</p><p>[Short, polite follow-up]</p>"
+                                                       "<p>Hi {{first_name|there}},</p><p>I'm following up on my last email in case it got buried. Is this worth a quick "
+                                                       "conversation?</p>"
                                                        "<p>Best regards,<br>{{sender_name}}</p>"))
                 back_to_draft(c, "A follow-up was added.")
         elif action == "delete":
