@@ -112,8 +112,14 @@ def main():
         print(f"2. Database ready in {data_dir} (schema version {version} of {MIGRATIONS[-1][0]}).")
 
         user = query("SELECT * FROM users WHERE email = ?", (email,), one=True)
-        if user:
-            print(f"3. The account {email} already exists: nothing changed. Use 'Forgot your password?' if needed.")
+        if user and not user["last_login_at"]:
+            # Never signed in, so the earlier link may have been missed: issue a fresh one (the old one stops working).
+            from gm.transactional import new_reset_token
+            token = new_reset_token(user["id"], minutes=24 * 60)
+            print(f"3. The account {email} exists but has never signed in. New link to choose your password (24 hours):")
+            print(f"   https://{domain}/reset/{user['id']}/{token}?invite=1")
+        elif user:
+            print(f"3. The account {email} already exists and has been used: nothing changed.")
         else:
             from werkzeug.security import generate_password_hash
             from gm.auth import create_workspace
