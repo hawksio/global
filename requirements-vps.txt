@@ -1,0 +1,3 @@
+-r requirements.txt
+-r requirements-ai.txt
+gunicorn>=23,<24

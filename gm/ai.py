@@ -113,6 +113,11 @@ def provider():
     if choice == "mock":
         return MockProvider()
     if choice in ("anthropic", "auto") and key:
+        try:
+            import anthropic  # noqa: F401  (optional: pip install -r requirements-ai.txt)
+        except ImportError:
+            current_app.logger.warning("An AI key is set but the anthropic package is not installed; using the free assistant")
+            return None
         return AnthropicProvider(key, current_app.config["AI_MODEL"], current_app.config["AI_EFFORT"])
     return None  # rule-based
 

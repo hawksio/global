@@ -4,6 +4,8 @@ Run it from cPanel → Setup Python App → your app → "Execute python script"
 
     setup_cpanel.py yourdomain.com you@yourdomain.com
 
+It installs the packages from requirements.txt first (add --skip-install to skip that).
+
 It is safe to run again: an existing .env, database or account is never overwritten.
 What it does:
   1. creates the private settings file .env (production settings and freshly generated secret keys);
@@ -24,6 +26,17 @@ def main():
         return 1
     domain = sys.argv[1].strip().lower().removeprefix("https://").removeprefix("http://").strip("/")
     email = sys.argv[2].strip().lower()
+    if "--skip-install" not in sys.argv:
+        import subprocess
+        print("0. Installing the required Python packages (this can take a few minutes)...")
+        proc = subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-r",
+                               os.path.join(ROOT, "requirements.txt")], capture_output=True, text=True)
+        if proc.returncode != 0:
+            print("   Installation FAILED. The last lines from pip were:")
+            for line in (proc.stdout + proc.stderr).strip().splitlines()[-25:]:
+                print("   | " + line)
+            return 1
+        print("   Packages installed.")
     home = os.path.expanduser("~")
     data_dir = os.path.join(home, "gm-data")
     env_path = os.path.join(ROOT, ".env")

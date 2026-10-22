@@ -104,7 +104,7 @@ https://resend.com/docs/webhooks/introduction
 ## 4. VPS or PaaS (when shared hosting can't run it)
 
 ```bash
-python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3.12 -m venv .venv && .venv/bin/pip install -r requirements-vps.txt
 cp .env.example .env   # fill it in; GM_ENV=production
 .venv/bin/flask --app gm migrate
 .venv/bin/gunicorn -w 2 -b 127.0.0.1:8000 wsgi:app      # behind nginx with HTTPS; GM_TRUST_PROXY=1
@@ -115,7 +115,7 @@ workers and one background worker are plenty for SQLite.
 
 ## 5. AI provider
 
-Optional. Set `GM_ANTHROPIC_API_KEY` (or save it under *System administration → keys*). The default model is
+Optional. Install it with `pip install -r requirements-ai.txt`, then set `GM_ANTHROPIC_API_KEY` (or save it under *System administration → keys*). The default model is
 `claude-opus-5-5` with low effort and server-side refusal fallbacks enabled; change it with `GM_AI_MODEL`. Usage is
 capped per workspace (*Settings*), and token use and estimated cost show in Analytics. With no key, the free
 rule-based assistant is used. `GM_AI_PROVIDER=rules` forces it even when a key exists.

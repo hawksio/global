@@ -1,11 +1,8 @@
-# Global Marketing runtime dependencies (Python 3.10+). Versions verified 2026-10-21.
-flask>=3.0.3,<4          # BSD-3-Clause  web framework
-email-validator>=2.2,<3  # Unlicense     syntax and normalisation
-dnspython>=2.6,<3        # ISC           DNS / MX / SPF / DKIM / DMARC lookups
-resend>=2.50,<3          # MIT           official Resend SDK (sending, webhook verification, domains)
-requests>=2.32,<3        # Apache-2.0    HTTP for the discovery crawler (also used by the Resend SDK)
-cryptography>=43         # Apache-2.0 / BSD  encryption of stored API keys (Fernet)
-segno>=1.6,<2            # BSD-3-Clause  QR code for authenticator-app set-up
-tzdata>=2024.1           # Apache-2.0    IANA time zones (needed on Windows; harmless elsewhere)
-anthropic>=1.15,<2       # MIT           optional AI assistant (only used when an API key is configured)
-gunicorn>=23,<24; sys_platform != "win32"   # MIT  production WSGI server on a VPS (cPanel uses Passenger instead)
+flask>=3.0.3,<4
+email-validator>=2.2,<3
+dnspython>=2.6,<3
+resend>=2.50,<3
+requests>=2.32,<3
+cryptography>=43
+segno>=1.6,<2
+tzdata>=2024.1
