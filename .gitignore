@@ -24,3 +24,6 @@ Thumbs.db
 
 # Local editor / assistant settings
 .claude/
+
+# Upload bundles built locally
+*.zip
