@@ -27,3 +27,7 @@ Thumbs.db
 
 # Upload bundles built locally
 *.zip
+
+# Per-server setup files
+setup_cpanel.log
+setup_cpanel.txt

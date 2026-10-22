@@ -5,6 +5,9 @@ Run it from cPanel → Setup Python App → your app → "Execute python script"
     setup_cpanel.py yourdomain.com you@yourdomain.com
 
 It installs the packages from requirements.txt first (add --skip-install to skip that).
+If your control panel can't pass arguments, put the domain and the email on two lines in setup_cpanel.txt
+and run just: setup_cpanel.py
+Everything it prints is also saved in setup_cpanel.log (open it in File Manager).
 
 It is safe to run again: an existing .env, database or account is never overwritten.
 What it does:
@@ -20,12 +23,45 @@ import sys
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
+LOG = os.path.join(ROOT, "setup_cpanel.log")
+SETTINGS = os.path.join(ROOT, "setup_cpanel.txt")
+
+
+class _Tee:
+    """Print to the screen and to setup_cpanel.log (cPanel's script runner doesn't always show output)."""
+    def __init__(self, stream, path):
+        self.stream, self.file = stream, open(path, "w", encoding="utf-8")
+
+    def write(self, text):
+        self.file.write(text)
+        self.file.flush()
+        try:
+            self.stream.write(text)
+        except Exception:
+            pass
+
+    def flush(self):
+        self.file.flush()
+
+
+def _arguments():
+    """Domain and email from the command line, or from setup_cpanel.txt (two lines) next to this script."""
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if len(args) < 2 and os.path.exists(SETTINGS):
+        with open(SETTINGS, encoding="utf-8") as fh:
+            args = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+    if len(args) < 2 or "@" not in args[1] or "." not in args[0]:
+        return None, None
+    return args[0].lower().removeprefix("https://").removeprefix("http://").strip("/"), args[1].lower()
+
+
 def main():
-    if len(sys.argv) < 3 or "@" not in sys.argv[2] or "." not in sys.argv[1]:
+    domain, email = _arguments()
+    if not domain:
         print("Usage: setup_cpanel.py yourdomain.com you@yourdomain.com")
+        print("   (or put the domain and the email on two lines in setup_cpanel.txt next to this script)")
         return 1
-    domain = sys.argv[1].strip().lower().removeprefix("https://").removeprefix("http://").strip("/")
-    email = sys.argv[2].strip().lower()
+    print(f"Setting up Global Marketing for {domain} (owner: {email})")
     if "--skip-install" not in sys.argv:
         import subprocess
         print("0. Installing the required Python packages (this can take a few minutes)...")
@@ -96,4 +132,13 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.stdout = sys.stderr = _Tee(sys.__stdout__, LOG)
+    try:
+        code = main()
+    except Exception:
+        import traceback
+        print("Setup stopped with an error:")
+        traceback.print_exc(file=sys.stdout)
+        code = 1
+    print(f"(This output is also saved in {LOG})")
+    sys.exit(code)
