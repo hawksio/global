@@ -15,18 +15,21 @@
     <tbody>{% for row in preview %}<tr>{% for cell in row %}<td><small>{{ cell[:60] }}</small></td>{% endfor %}</tr>{% endfor %}</tbody>
   </table></div>
 </section>
-<section class="card" style="max-width:860px"><h2>Where did these contacts come from?</h2>
-  <p class="muted">Recorded on every imported contact and checked before any campaign.</p>
-  <div class="field"><label for="source_detail">Source</label><input id="source_detail" type="text" name="source_detail" required placeholder="e.g. CRM export of existing customers, October 2026"></div>
-  <div class="field"><label for="purpose">Purpose</label><input id="purpose" type="text" name="purpose" required placeholder="e.g. Product update newsletter for customers"></div>
-  <div class="row">
-    <div class="field"><label for="recipient_type">These addresses are</label><select id="recipient_type" name="recipient_type">{% for k, v in RECIPIENT_TYPES.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
-    <div class="field"><label for="lawful_basis">Permission to email</label><select id="lawful_basis" name="lawful_basis">{% for k, v in LAWFUL_BASES.items() %}<option value="{{ k }}" {% if k == 'unknown' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
-    <div class="field"><label for="tag">Tag all rows with</label><input id="tag" type="text" name="tag" placeholder="optional"></div>
-  </div>
-  <label class="check"><input type="checkbox" name="dns" checked> <span>Check each domain's mail routing (DNS) during the import. Free; adds a few seconds per new domain.</span></label>
-  <label class="check"><input type="checkbox" name="update_existing"> <span>For addresses already in your contacts, fill in empty fields from this file</span></label>
-  <div class="actions mt"><button class="btn primary" type="submit">Start import</button><a class="btn" href="{{ url_for('contacts.import_upload') }}">Cancel</a></div>
+<section class="card" style="max-width:860px"><h2>Import these contacts</h2>
+  <p>They're saved as <strong>business contacts you may email</strong>, which is right for company addresses such as
+    name@company.com. If they're private people who haven't agreed to hear from you, change that under "More options".</p>
+  <div class="field" style="max-width:320px"><label for="tag">Put them in a group (optional)</label><input id="tag" type="text" name="tag" placeholder="e.g. trade fair 2026"><div class="help">Lets you email just this group from Compose.</div></div>
+  <details class="more"><summary>More options</summary>
+    <div class="row">
+      <div class="field"><label for="recipient_type">These addresses are</label><select id="recipient_type" name="recipient_type">{% for k, v in RECIPIENT_TYPES.items() %}<option value="{{ k }}" {% if k == 'business' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="lawful_basis">Permission to email</label><select id="lawful_basis" name="lawful_basis">{% for k, v in LAWFUL_BASES.items() %}<option value="{{ k }}" {% if k == 'legitimate_interest' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="field"><label for="source_detail">Where they came from (optional)</label><input id="source_detail" type="text" name="source_detail" placeholder="e.g. Trade fair 2026 (default: the file name)"></div>
+    <div class="field"><label for="purpose">Why you'll email them (optional)</label><input id="purpose" type="text" name="purpose" placeholder="Default: business outreach"></div>
+    <label class="check"><input type="checkbox" name="dns" checked> <span>Check each address's domain while importing (free; a few seconds per new domain)</span></label>
+    <label class="check"><input type="checkbox" name="update_existing"> <span>For addresses already in your contacts, fill in empty fields from this file</span></label>
+  </details>
+  <div class="actions mt"><button class="btn primary" type="submit">Import</button><a class="btn" href="{{ url_for('contacts.import_upload') }}">Cancel</a></div>
 </section>
 </form>
 {% endblock %}

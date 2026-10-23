@@ -63,12 +63,13 @@ def _friendly_problems(items, report):
         n = it["label"].split(".")[0]
         if n == "1":
             why = "; ".join(f"{k} ({v})" for k, v in report["excluded"].items())
-            out.append("Nobody on this list can be emailed yet" + (f": {why}." if why else "."))
+            out.append("Nobody on this list can be emailed yet" + (f": {why}." if why else ". Add contacts first, or choose "
+                       "“Type email addresses”."))
         elif n == "5":
             out.append("The email needs a fix: " + it["detail"])
         elif n == "7":
-            out.append("Add your company's postal address in Settings → Company & sender (the law requires it in every "
-                       "marketing email).")
+            out.append("Fill in your business address in the box at the top. It appears in small print at the bottom of "
+                       "your emails, which the law requires.")
         elif n == "9":
             out.append("Your sending domain isn't set up yet: " + it["detail"] + " See More tools → Reports → Email health.")
         elif n == "10":
@@ -84,124 +85,219 @@ def compose():
     ws = workspace()
     wid = ws["id"]
     user = current_user()
-    tags = [dict(name=t["name"], n=_ready_count(wid, t["name"]))
-            for t in query("SELECT name FROM tags WHERE workspace_id = ? ORDER BY name", (wid,))]
     f = request.form
-    ready_all = _ready_count(wid)
-    form = {"to_mode": f.get("to_mode", request.args.get("to", "all" if ready_all else "paste")), "pasted": f.get("pasted", ""),
-            "from_name": f.get("from_name", ws["sender_name"] or user["full_name"]), "subject": f.get("subject", ""),
-            "body": f.get("body", ""), "follow_up": f.get("follow_up") == "on", "follow_days": f.get("follow_days", "3"),
-            "follow_body": f.get("follow_body", FOLLOW_UP_TEXT), "when": f.get("when", "")}
-    problems = []
+    draft = None
+    draft_id = f.get("draft_id", type=int) or request.args.get("draft", type=int)
+    if draft_id:
+        draft = query("SELECT * FROM campaigns WHERE id = ? AND workspace_id = ? AND status = 'draft' AND style = 'plain'",
+                      (draft_id, wid), one=True)
+        if not draft:
+            abort(404)
+
+    # --- what's on the form
     if request.method == "POST":
-        action = f.get("action", "send")
-        subject, body = form["subject"].strip()[:200], form["body"].strip()
-        if not subject:
-            problems.append("Add a subject.")
-        if not body:
-            problems.append("Write your message.")
-        bad = render.unknown_fields(subject, body, form["follow_body"] if form["follow_up"] else "")
-        if bad:
-            problems.append("These names in {{ }} aren't recognised: " + ", ".join(bad) +
-                            ". Use the “Insert first name” button instead.")
-        if not ws["sender_email"]:
-            problems.append("Set the email address you send from in Settings → Company & sender.")
+        form = {"to_mode": f.get("to_mode", "all"), "pasted": f.get("pasted", ""), "from_name": f.get("from_name", ""),
+                "subject": f.get("subject", ""), "body": f.get("body", ""), "follow_up": f.get("follow_up") == "on",
+                "follow_days": f.get("follow_days", "3"), "follow_body": f.get("follow_body", FOLLOW_UP_TEXT),
+                "when": f.get("when", ""), "permission": f.get("permission") == "on",
+                "company_address": f.get("company_address", ""), "sender_email": f.get("sender_email", "")}
+    elif draft:
+        seg = json.loads(draft["segment"])
+        steps = steps_of(draft["id"])
+        form = {"to_mode": seg.get("_to_mode", "all"), "pasted": seg.get("_pasted", ""), "from_name": draft["from_name"],
+                "subject": steps[0]["subject"] if steps else draft["name"], "body": steps[0]["text_body"] if steps else "",
+                "follow_up": len(steps) > 1, "follow_days": str(steps[1]["delay_days"]) if len(steps) > 1 else "3",
+                "follow_body": steps[1]["text_body"] if len(steps) > 1 else FOLLOW_UP_TEXT, "when": "",
+                "permission": bool(seg.get("_pasted")), "company_address": "", "sender_email": ""}
+    else:
+        ready = _ready_count(wid)
+        form = {"to_mode": request.args.get("to", "all" if ready else "paste"), "pasted": "",
+                "from_name": ws["sender_name"] or user["full_name"], "subject": "", "body": "", "follow_up": False,
+                "follow_days": "3", "follow_body": FOLLOW_UP_TEXT, "when": "", "permission": False,
+                "company_address": "", "sender_email": ""}
+
+    def page(problems=(), code=200):
+        current = workspace()
+        tags = [dict(name=t["name"], n=_ready_count(wid, t["name"]))
+                for t in query("SELECT name FROM tags WHERE workspace_id = ? AND name NOT LIKE 'compose-%' ORDER BY name", (wid,))]
+        no_permission = scalar("SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND sandbox = 0 AND status = 'active' "
+                               "AND lawful_basis = 'unknown'", (wid,))
+        return render_template("simple/compose.html", form=form, tags=tags, problems=list(problems), ws=current,
+                               ready_all=_ready_count(wid), draft=draft, no_permission=no_permission), code
+
+    if request.method != "POST":
+        return page()
+
+    action = f.get("action", "send")
+
+    # --- details that may be missing from Settings can be filled in right here
+    updates = {}
+    if form["company_address"].strip() and not ws["company_address"]:
+        updates["company_address"] = form["company_address"].strip()[:300]
+    if form["sender_email"].strip() and not ws["sender_email"]:
+        ok, value = validation.syntax_check(form["sender_email"])
+        if ok:
+            updates["sender_email"] = value.lower()
+            updates["reply_to"] = ws["reply_to"] or value.lower()
+    if not ws["sender_name"] and form["from_name"].strip():
+        updates["sender_name"] = form["from_name"].strip()[:100]
+    if updates:
+        execute("UPDATE workspaces SET " + ", ".join(f"{k} = ?" for k in updates) + " WHERE id = ?", (*updates.values(), wid))
+        audit("settings.from_compose", detail=", ".join(updates))
+        from flask import g
+        g.pop("workspace", None)  # settings changed: don't reuse the cached copy
+        ws = workspace()
+
+    subject, body = form["subject"].strip()[:200], form["body"].strip()
+
+    # --- Save draft: keep whatever is there, no checks
+    if action == "save":
+        cid = _save_draft(ws, user, form, draft)
+        flash("Draft saved. Find it at the top of Sent.", "success")
+        return redirect(url_for("simple.compose", draft=cid))
+
+    problems = []
+    if not subject:
+        problems.append("Add a subject.")
+    if not body:
+        problems.append("Write your message.")
+    bad = render.unknown_fields(subject, body, form["follow_body"] if form["follow_up"] else "")
+    if bad:
+        problems.append("These names in {{ }} aren't recognised: " + ", ".join(bad) +
+                        ". Use the “Insert first name” button instead.")
+    if not ws["sender_email"]:
+        problems.append("Fill in the email address you send from (box at the top).")
+    if problems:
+        return page(problems, 400)
+
+    if action == "test":
+        from .templates_lib import send_test
+        wsx = dict(ws, sender_name=form["from_name"] or ws["sender_name"], reply_to=ws["reply_to"] or ws["sender_email"])
+        status, error = send_test(wsx, user["email"], subject, text_to_html(body), body, kind="compose", style="plain")
+        if status == "failed":
+            flash(f"The test couldn't be sent: {error}", "error")
+        elif status == "simulated":
+            flash("Practice mode is on, so the test was saved, not sent. Turn it off in Settings → Connections.", "info")
+        else:
+            flash(f"Test sent to {user['email']}. Check your inbox (and the spam folder).", "success")
+        return page()
+
+    if form["to_mode"] == "paste":
+        addresses, invalid = _parse_addresses(form["pasted"])
+        if not addresses:
+            problems.append("Type or paste at least one email address.")
+        if not form["permission"]:
+            problems.append("Tick the box under the addresses to confirm they're business contacts you have a reason to email.")
+        if invalid:
+            problems.append("These don't look like email addresses: " + ", ".join(invalid[:10]))
         if problems:
-            return render_template("simple/compose.html", form=form, tags=tags, problems=problems, ws=ws,
-                                   ready_all=_ready_count(wid)), 400
+            return page(problems, 400)
 
-        if action == "test":
-            from .templates_lib import send_test
-            wsx = dict(ws, sender_name=form["from_name"] or ws["sender_name"], reply_to=ws["reply_to"] or ws["sender_email"])
-            status, error = send_test(wsx, user["email"], subject, text_to_html(body), body, kind="compose", style="plain")
-            if status == "failed":
-                flash(f"The test couldn't be sent: {error}", "error")
-            elif status == "simulated":
-                flash("Practice mode is on, so the test was saved, not sent. Turn it off in Settings → Connections.", "info")
-            else:
-                flash(f"Test sent to {user['email']}. Check your inbox (and the spam folder).", "success")
-            return render_template("simple/compose.html", form=form, tags=tags, problems=[], ws=ws,
-                                   ready_all=_ready_count(wid))
+    cid = _save_draft(ws, user, form, draft)
+    if form["to_mode"] == "paste":
+        tag = f"compose-{cid}"
+        for email in addresses:
+            contact_id, created = create_contact(wid, email, {}, "manual", purpose="Business email sent from Compose",
+                                                 source_detail=f"Typed in Compose by {user['full_name']}",
+                                                 recipient_type="business", lawful_basis="legitimate_interest")
+            if created:
+                validation.store_on_contact(contact_id, validation.check(email, wid, dns=True))
+            apply_tags(wid, contact_id, [tag])
+        seg = json.loads(query("SELECT segment FROM campaigns WHERE id = ?", (cid,), one=True)["segment"])
+        seg["tag"] = tag
+        execute("UPDATE campaigns SET segment = ? WHERE id = ?", (json.dumps(seg), cid))
 
-        # Who gets it
-        segment = {"verification_status": READY_STATUSES, "status": ["active"], "exclude_sandbox": True}
-        if form["to_mode"] == "paste":
-            addresses, invalid = _parse_addresses(form["pasted"])
-            if not addresses:
-                problems.append("Type or paste at least one email address.")
-            if f.get("permission") != "on":
-                problems.append("Tick the box to confirm these are business contacts you have a reason to email.")
-            if invalid:
-                problems.append("These don't look like email addresses: " + ", ".join(invalid[:10]))
-            if problems:
-                return render_template("simple/compose.html", form=form, tags=tags, problems=problems, ws=ws,
-                                       ready_all=_ready_count(wid)), 400
-            tag = f"compose-{now()[:16].replace(' ', '-').replace(':', '')}"
-            for email in addresses:
-                cid, created = create_contact(wid, email, {}, "manual", purpose="Business email sent from Compose",
-                                              source_detail=f"Typed in Compose by {user['full_name']}",
-                                              recipient_type="business", lawful_basis="legitimate_interest")
-                if created:
-                    validation.store_on_contact(cid, validation.check(email, wid, dns=True))
-                apply_tags(wid, cid, [tag])
-            segment["tag"] = tag
-        elif form["to_mode"].startswith("tag:"):
-            segment["tag"] = form["to_mode"][4:]
+    if not ws["sandbox_mode"]:
+        from .deliverability import ensure_recent_check
+        ensure_recent_check(ws, ws["sender_email"].rsplit("@", 1)[-1])
+    c = query("SELECT * FROM campaigns WHERE id = ?", (cid,), one=True)
+    items, report = readiness(workspace(), c)
+    problems = _friendly_problems(items, report)
+    if problems:
+        draft = c  # keep their work: it stays as a draft
+        return page(problems, 400)
 
-        with transaction():
+    if not can("approve_campaigns"):
+        execute("UPDATE campaigns SET status = 'pending_approval' WHERE id = ?", (cid,))
+        audit("campaign.submitted", target=cid, detail="from Compose")
+        flash("Sent to your administrator for approval. It goes out as soon as they approve it.", "success")
+        return redirect(url_for("simple.sent_detail", campaign_id=cid))
+    start_at = now()
+    if action == "schedule" and form["when"]:
+        from datetime import datetime, timezone
+        from zoneinfo import ZoneInfo
+        from .db import fmt_ts
+        try:
+            local = datetime.fromisoformat(form["when"]).replace(tzinfo=ZoneInfo(ws["timezone"]))
+            if local.astimezone(timezone.utc) > datetime.now(timezone.utc):
+                start_at = fmt_ts(local)
+        except ValueError:
+            pass
+    execute("UPDATE campaigns SET status = 'approved', approved_by = ?, approved_at = ? WHERE id = ?", (user["id"], now(), cid))
+    audit("campaign.approved", target=cid, detail="sent from Compose")
+    n = launch_campaign(query("SELECT * FROM campaigns WHERE id = ?", (cid,), one=True), workspace(), start_at)
+    audit("campaign.launched", target=cid, detail=f"{n} recipients, start {start_at} UTC")
+    jobs.enqueue("send_campaigns", dedupe_key="send_campaigns")
+    practice = " (practice mode: nothing is really sent)" if ws["sandbox_mode"] else ""
+    flash((f"Scheduled for {n} people{practice}." if start_at > now() else
+           f"Sending to {n} people{practice}. Emails go out gently, about 2 a minute."), "success")
+    return redirect(url_for("simple.sent_detail", campaign_id=cid))
+
+
+def _save_draft(ws, user, form, draft):
+    """Create or update the draft behind this Compose page. Returns its id."""
+    subject = form["subject"].strip()[:200] or "(no subject)"
+    body = form["body"].strip()
+    segment = {"verification_status": READY_STATUSES, "status": ["active"], "exclude_sandbox": True,
+               "_to_mode": form["to_mode"], "_pasted": form["pasted"][:20000] if form["to_mode"] == "paste" else ""}
+    if form["to_mode"].startswith("tag:"):
+        segment["tag"] = form["to_mode"][4:]
+    with transaction():
+        if draft:
+            cid = draft["id"]
+            execute("UPDATE campaigns SET name = ?, segment = ?, from_name = ?, from_email = ?, reply_to = ?, updated_at = ? "
+                    "WHERE id = ?", (subject, json.dumps(segment), form["from_name"].strip()[:100], ws["sender_email"],
+                                     ws["reply_to"] or ws["sender_email"], now(), cid))
+            execute("DELETE FROM campaign_steps WHERE campaign_id = ?", (cid,))
+        else:
             cid = execute("INSERT INTO campaigns (workspace_id, name, status, segment, from_name, from_email, reply_to, timezone, "
                           "send_window_start, send_window_end, send_days, rate_per_minute, dry_run, style, created_by, "
                           "created_at, updated_at) VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, 0, 24, '0,1,2,3,4,5,6', 2, 0, 'plain', "
-                          "?, ?, ?)", (wid, subject, json.dumps(segment), form["from_name"].strip()[:100], ws["sender_email"],
-                                       ws["reply_to"] or ws["sender_email"], ws["timezone"], user["id"], now(), now()))
+                          "?, ?, ?)", (ws["id"], subject, json.dumps(segment), form["from_name"].strip()[:100],
+                                       ws["sender_email"], ws["reply_to"] or ws["sender_email"], ws["timezone"], user["id"],
+                                       now(), now()))
+        execute("INSERT INTO campaign_steps (campaign_id, step_no, delay_days, subject, html_body, text_body) "
+                "VALUES (?, 0, 0, ?, ?, ?)", (cid, subject, text_to_html(body), body))
+        if form["follow_up"] and form["follow_body"].strip():
+            days = max(1, min(int(form["follow_days"]) if str(form["follow_days"]).isdigit() else 3, 30))
             execute("INSERT INTO campaign_steps (campaign_id, step_no, delay_days, subject, html_body, text_body) "
-                    "VALUES (?, 0, 0, ?, ?, ?)", (cid, subject, text_to_html(body), body))
-            if form["follow_up"] and form["follow_body"].strip():
-                days = max(1, min(int(form["follow_days"]) if str(form["follow_days"]).isdigit() else 3, 30))
-                execute("INSERT INTO campaign_steps (campaign_id, step_no, delay_days, subject, html_body, text_body) "
-                        "VALUES (?, 1, ?, ?, ?, ?)", (cid, days, subject, text_to_html(form["follow_body"]),
-                                                     form["follow_body"].strip()))
-        if not ws["sender_name"] and form["from_name"].strip():
-            execute("UPDATE workspaces SET sender_name = ? WHERE id = ?", (form["from_name"].strip()[:100], wid))
+                    "VALUES (?, 1, ?, ?, ?, ?)", (cid, days, subject, text_to_html(form["follow_body"]),
+                                                 form["follow_body"].strip()))
+    return cid
 
-        if not ws["sandbox_mode"]:
-            from .deliverability import ensure_recent_check
-            ensure_recent_check(ws, ws["sender_email"].rsplit("@", 1)[-1])
-        c = query("SELECT * FROM campaigns WHERE id = ?", (cid,), one=True)
-        items, report = readiness(workspace(), c)
-        problems = _friendly_problems(items, report)
-        if problems:
-            execute("DELETE FROM campaigns WHERE id = ?", (cid,))  # nothing was sent; keep Sent tidy
-            return render_template("simple/compose.html", form=form, tags=tags, problems=problems, ws=ws,
-                                   ready_all=_ready_count(wid)), 400
 
-        if not can("approve_campaigns"):
-            execute("UPDATE campaigns SET status = 'pending_approval' WHERE id = ?", (cid,))
-            audit("campaign.submitted", target=cid, detail="from Compose")
-            flash("Sent to your administrator for approval. It goes out as soon as they approve it.", "success")
-            return redirect(url_for("simple.sent_detail", campaign_id=cid))
-        start_at = now()
-        if action == "schedule" and form["when"]:
-            from datetime import datetime, timezone
-            from zoneinfo import ZoneInfo
-            from .db import fmt_ts
-            try:
-                local = datetime.fromisoformat(form["when"]).replace(tzinfo=ZoneInfo(ws["timezone"]))
-                if local.astimezone(timezone.utc) > datetime.now(timezone.utc):
-                    start_at = fmt_ts(local)
-            except ValueError:
-                pass
-        execute("UPDATE campaigns SET status = 'approved', approved_by = ?, approved_at = ? WHERE id = ?",
-                (user["id"], now(), cid))
-        audit("campaign.approved", target=cid, detail="sent from Compose")
-        n = launch_campaign(query("SELECT * FROM campaigns WHERE id = ?", (cid,), one=True), workspace(), start_at)
-        audit("campaign.launched", target=cid, detail=f"{n} recipients, start {start_at} UTC")
-        jobs.enqueue("send_campaigns", dedupe_key="send_campaigns")
-        practice = " (practice mode: nothing is really sent)" if ws["sandbox_mode"] else ""
-        flash((f"Scheduled for {n} people{practice}." if start_at > now() else
-               f"Sending to {n} people{practice}. Emails go out gently, about 2 a minute.") , "success")
-        return redirect(url_for("simple.sent_detail", campaign_id=cid))
-    return render_template("simple/compose.html", form=form, tags=tags, problems=problems, ws=ws, ready_all=_ready_count(wid))
+@bp.route("/compose/drafts/<int:campaign_id>/delete", methods=["POST"])
+@require("edit_campaigns")
+def delete_draft(campaign_id):
+    execute("DELETE FROM campaigns WHERE id = ? AND workspace_id = ? AND status = 'draft' AND style = 'plain'",
+            (campaign_id, ws_id()))
+    flash("Draft deleted.", "success")
+    return redirect(url_for("simple.sent"))
+
+
+@bp.route("/compose/mark-business", methods=["POST"])
+@require("edit_contacts")
+def mark_business():
+    """One click for contacts added without a recorded permission: confirm they're business contacts."""
+    wid = ws_id()
+    n = scalar("SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND sandbox = 0 AND status = 'active' "
+               "AND lawful_basis = 'unknown'", (wid,))
+    execute("UPDATE contacts SET lawful_basis = 'legitimate_interest', recipient_type = CASE WHEN recipient_type = 'unknown' "
+            "THEN 'business' ELSE recipient_type END, updated_at = ? WHERE workspace_id = ? AND sandbox = 0 AND status = 'active' "
+            "AND lawful_basis = 'unknown'", (now(), wid))
+    audit("contacts.marked_business", detail=f"{n} contacts", workspace_id=wid)
+    flash(f"{n} contacts marked as business contacts you can email.", "success")
+    return redirect(request.referrer or url_for("simple.compose"))
 
 
 def sent_page():
@@ -218,8 +314,12 @@ def sent_page():
     from .main import onboarding_steps
     steps = onboarding_steps(workspace())
     next_step = next((s for s in steps if not s["done"]), None)
-    drafts = scalar("SELECT COUNT(*) FROM campaigns WHERE workspace_id = ? AND status = 'draft'", (wid,))
+    drafts = scalar("SELECT COUNT(*) FROM campaigns WHERE workspace_id = ? AND status = 'draft' AND style != 'plain'", (wid,))
+    my_drafts = query("SELECT c.id, c.name, c.updated_at, (SELECT text_body FROM campaign_steps s WHERE s.campaign_id = c.id "
+                      "AND s.step_no = 0) AS preview FROM campaigns c WHERE c.workspace_id = ? AND c.status = 'draft' "
+                      "AND c.style = 'plain' ORDER BY c.updated_at DESC", (wid,))
     return render_template("simple/sent.html", rows=rows, SIMPLE_STATUS=SIMPLE_STATUS, next_step=next_step, drafts=drafts,
+                           my_drafts=my_drafts,
                            ws=workspace())
 
 

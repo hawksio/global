@@ -505,10 +505,10 @@ def import_map(import_id):
             return redirect(url_for("contacts.import_map", import_id=import_id))
         if form.get("recipient_type") not in RECIPIENT_TYPES or form.get("lawful_basis") not in LAWFUL_BASES:
             abort(400)
-        if not form.get("purpose", "").strip() or not form.get("source_detail", "").strip():
-            flash("Describe where these contacts came from and why you hold them. It is recorded on every contact.", "error")
-            return redirect(url_for("contacts.import_map", import_id=import_id))
-        options = {"purpose": form["purpose"].strip()[:300], "source_detail": form["source_detail"].strip()[:300],
+        # Optional: sensible defaults are recorded when left empty.
+        purpose = form.get("purpose", "").strip() or "Business outreach"
+        source_detail = form.get("source_detail", "").strip() or f"Imported file {imp['filename']}"
+        options = {"purpose": purpose[:300], "source_detail": source_detail[:300],
                    "recipient_type": form["recipient_type"], "lawful_basis": form["lawful_basis"],
                    "tag": form.get("tag", "").strip()[:40], "dns": form.get("dns") == "on",
                    "update_existing": form.get("update_existing") == "on"}

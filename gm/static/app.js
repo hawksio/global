@@ -129,6 +129,17 @@
   }
   if (toMode) { toMode.addEventListener("change", syncTo); syncTo(); }
 
+  // Warn before leaving Compose with unsaved changes (like Gmail does)
+  var watched = document.querySelector("form[data-warn-unsaved]");
+  if (watched) {
+    var dirty = false;
+    watched.addEventListener("input", function () { dirty = true; });
+    watched.addEventListener("submit", function () { dirty = false; });
+    window.addEventListener("beforeunload", function (e) {
+      if (dirty && watched.dataset.confirmed !== "1") { e.preventDefault(); e.returnValue = ""; }
+    });
+  }
+
   // Auto-hide toasts
   setTimeout(function () {
     document.querySelectorAll(".toast.success").forEach(function (t) { t.remove(); });

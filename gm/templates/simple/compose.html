@@ -1,50 +1,70 @@
 {% extends "base.html" %}{% from "_ui.html" import csrf %}
-{% block title %}New email{% endblock %}
+{% block title %}{{ 'Draft' if draft else 'New email' }}{% endblock %}
 {% block content %}
-<form method="post" class="compose">{{ csrf() }}
-  <div class="compose-head">New email{% if ws.sandbox_mode %} <span class="badge sim">Practice mode: nothing is really sent</span>{% endif %}</div>
+{% if no_permission and can('edit_contacts') %}
+<form method="post" action="{{ url_for('simple.mark_business') }}" class="notice info" style="max-width:860px"
+      data-confirm="Mark {{ no_permission }} contacts as business contacts you have a reason to email?">{{ csrf() }}
+  {{ no_permission }} of your contacts can't be emailed yet because nobody recorded that you may email them.
+  <button class="btn small" type="submit">They're business contacts: let me email them</button>
+</form>
+{% endif %}
+
+<form method="post" class="compose" data-warn-unsaved action="{{ url_for('simple.compose') }}">{{ csrf() }}
+  {% if draft %}<input type="hidden" name="draft_id" value="{{ draft.id }}">{% endif %}
+  <div class="compose-head">{{ 'Draft' if draft else 'New email' }}{% if ws.sandbox_mode %} <span class="badge sim">Practice mode: nothing is really sent</span>{% endif %}</div>
 
   {% if problems %}<div class="notice bad" role="alert"><strong>Before sending:</strong><ul style="margin:6px 0 0">{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
+
+  {% if not ws.company_address or not ws.sender_email %}
+  <div class="compose-setup">
+    <strong>One-time details</strong> <small class="muted">(saved for all your emails)</small>
+    {% if not ws.sender_email %}<div class="field"><label for="sender_email">Your email address (emails are sent from it)</label>
+      <input id="sender_email" type="email" name="sender_email" value="{{ form.sender_email }}" placeholder="you@yourcompany.com"></div>{% endif %}
+    {% if not ws.company_address %}<div class="field"><label for="company_address">Your business address (small print at the bottom; required by law)</label>
+      <input id="company_address" type="text" name="company_address" value="{{ form.company_address }}" placeholder="Street, city, country"></div>{% endif %}
+  </div>
+  {% endif %}
 
   <div class="compose-row">
     <label for="to_mode">To</label>
     <select id="to_mode" name="to_mode">
-      <option value="all" {% if form.to_mode == 'all' %}selected{% endif %}>Everyone in my contacts ({{ ready_all }} ready)</option>
+      <option value="all" {% if form.to_mode == 'all' %}selected{% endif %}>Everyone in my contacts ({{ ready_all }})</option>
       {% for t in tags %}<option value="tag:{{ t.name }}" {% if form.to_mode == 'tag:' ~ t.name %}selected{% endif %}>Contacts tagged “{{ t.name }}” ({{ t.n }})</option>{% endfor %}
       <option value="paste" {% if form.to_mode == 'paste' %}selected{% endif %}>Type email addresses…</option>
     </select>
   </div>
   <div class="compose-paste" data-show-when="paste">
-    <textarea name="pasted" rows="2" placeholder="Only used if you chose “Type email addresses”: name@company.com, another@company.com">{{ form.pasted }}</textarea>
-    <label class="check"><input type="checkbox" name="permission"> <span>These are business contacts I have a genuine reason to email.</span></label>
+    <textarea name="pasted" rows="2" placeholder="name@company.com, another@company.com">{{ form.pasted }}</textarea>
+    <label class="check"><input type="checkbox" name="permission" {% if form.permission %}checked{% endif %}> <span>These are business contacts I have a genuine reason to email.</span></label>
   </div>
   <div class="compose-row"><label for="from_name">From</label>
     <input id="from_name" type="text" name="from_name" value="{{ form.from_name }}" placeholder="Your name">
-    <span class="muted nowrap">&lt;{{ ws.sender_email or 'set in Settings' }}&gt;</span></div>
+    {% if ws.sender_email %}<span class="muted nowrap">&lt;{{ ws.sender_email }}&gt;</span>{% endif %}</div>
   <div class="compose-row"><label for="subject">Subject</label>
-    <input id="subject" type="text" name="subject" value="{{ form.subject }}" placeholder="Short and specific, e.g. Question about your visa applications" required></div>
-  <textarea class="compose-body" name="body" id="body" rows="14" placeholder="Hi {{ '{{first_name|there}}' }},&#10;&#10;Write your message like a normal email.&#10;&#10;Best regards,&#10;{{ form.from_name }}" required>{{ form.body }}</textarea>
+    <input id="subject" type="text" name="subject" value="{{ form.subject }}" placeholder="Short and specific, e.g. Question about your visa applications"></div>
+  <textarea class="compose-body" name="body" id="body" rows="12" placeholder="Hi {{ '{{first_name|there}}' }},&#10;&#10;Write your message like a normal email.&#10;&#10;Best regards,&#10;{{ form.from_name }}">{{ form.body }}</textarea>
   <div class="compose-tools">
     <button class="btn small" type="button" data-insert="{{ '{{first_name|there}}' }}">+ Insert first name</button>
     <button class="btn small" type="button" data-insert="{{ '{{company}}' }}">+ Insert company</button>
-    <span class="muted"><small>Each person sees their own name. If a name is missing, “there” is used.</small></span>
   </div>
 
   <details class="more"{% if form.follow_up %} open{% endif %}><summary>Follow up automatically if they don't reply</summary>
     <label class="check"><input type="checkbox" name="follow_up" {% if form.follow_up %}checked{% endif %}> <span>Send one follow-up after
-      <input type="number" name="follow_days" value="{{ form.follow_days }}" min="1" max="30" style="width:70px;display:inline-block"> days to people who haven't replied, unsubscribed or bounced</span></label>
+      <input type="number" name="follow_days" value="{{ form.follow_days }}" min="1" max="30" style="width:70px;display:inline-block"> days to people who haven't replied</span></label>
     <textarea name="follow_body" rows="6">{{ form.follow_body }}</textarea>
   </details>
 
   <div class="compose-actions">
     <button class="btn primary send-btn" type="submit" name="action" value="send"
       data-confirm="Send this email now? It goes out gently, about 2 emails a minute.">Send</button>
-    <button class="btn" type="submit" name="action" value="test" formnovalidate>Send me a test</button>
+    <button class="btn" type="submit" name="action" value="save">Save draft</button>
+    <button class="btn" type="submit" name="action" value="test">Send me a test</button>
     <details class="schedule"><summary class="btn small">Schedule…</summary>
       <input type="datetime-local" name="when" value="{{ form.when }}"> <button class="btn small" type="submit" name="action" value="schedule">Schedule</button>
       <small class="muted">Time zone: {{ ws.timezone }}</small></details>
   </div>
 </form>
+{% if draft %}<form method="post" action="{{ url_for('simple.delete_draft', campaign_id=draft.id) }}" data-confirm="Delete this draft?">{{ csrf() }}<button class="btn link" type="submit">Delete draft</button></form>{% endif %}
 
 <details class="card more" style="max-width:860px"><summary>Tips for reaching the inbox</summary>
   <ul>

@@ -1,22 +1,20 @@
 {% extends "base.html" %}{% from "_ui.html" import csrf %}
 {% block title %}Connections{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Connections</h1><p>Credentials are encrypted at rest, never shown again after saving, and never sent to the browser.</p></div></div>
-<div class="grid cols-2">
-<section class="card"><h2>Resend (email sending)</h2>
-  <p>Status: {% if resend_hint %}<span class="badge ok">Key saved {{ resend_hint.hint }}</span> <small>updated {{ resend_hint.updated_at|dt }}</small>{% else %}<span class="badge">Not connected</span>{% endif %}</p>
-  <form method="post">{{ csrf() }}<input type="hidden" name="action" value="resend_key">
-    <div class="field"><label for="api_key">API key</label><input id="api_key" type="password" name="api_key" autocomplete="off" placeholder="re_…"><div class="help">Create a key with “sending access” for your domain in the Resend dashboard. Leave empty and save to remove it.</div></div>
-    <button class="btn primary" type="submit">Save key</button></form>
-  <form method="post" class="mt">{{ csrf() }}<input type="hidden" name="action" value="test"><button class="btn" type="submit">Test connection</button></form>
-  <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
-  <h3>Practice mode</h3>
-  <form method="post">{{ csrf() }}<input type="hidden" name="action" value="sandbox">
-    <label class="check"><input type="checkbox" name="sandbox_mode" {% if ws.sandbox_mode %}checked{% endif %}> <span>Practice mode: simulate everything, send nothing</span></label>
-    <button class="btn" type="submit">Save</button></form>
-  <p class="muted"><small>Resend's free plan has daily and monthly limits; paid plans cost more as volume grows. See resend.com/pricing.</small></p>
-</section>
-<section class="card"><h2>Resend webhook (delivery events)</h2>
+<div class="page-head"><div><h1>Connections</h1><p>Your keys are stored encrypted and never shown again.</p></div></div>
+<form method="post" class="card" style="max-width:760px">{{ csrf() }}<input type="hidden" name="action" value="email_service">
+  <h2>Email service (Resend)</h2>
+  <p>Status: {% if resend_hint %}<span class="badge ok">Connected</span> <small class="muted">key {{ resend_hint.hint }}</small>{% else %}<span class="badge">Not connected</span>{% endif %}
+    · {% if ws.sandbox_mode %}<span class="badge sim">Practice mode: nothing is sent</span>{% else %}<span class="badge ok">Live: emails really send</span>{% endif %}</p>
+  <div class="field"><label for="api_key">{{ 'Replace API key (leave empty to keep the current one)' if resend_hint else 'Resend API key' }}</label>
+    <input id="api_key" type="password" name="api_key" autocomplete="off" placeholder="re_…">
+    <div class="help">Create one in your Resend dashboard (API Keys → Create, “Sending access”).</div></div>
+  <label class="check"><input type="checkbox" name="sandbox_mode" {% if ws.sandbox_mode %}checked{% endif %}> <span><strong>Practice mode</strong>: try everything without sending real email. Untick to go live.</span></label>
+  <button class="btn primary" type="submit">Save</button> <small class="muted">Saving also tests the connection.</small>
+</form>
+<div style="max-width:760px">
+<details class="more card"><summary>Delivery tracking (optional): see deliveries, bounces and spam reports</summary>
+<section><h3>Resend webhook</h3>
   <p>Without it, delivery, bounces and complaints can't be tracked, and hard bounces won't be suppressed automatically.</p>
   <ol><li>In Resend → Webhooks, add this endpoint:</li></ol>
   <div class="actions"><input id="wh-url" type="text" readonly value="{{ webhook_url }}"><button class="btn small" type="button" data-copy="wh-url">Copy</button></div>
@@ -27,14 +25,17 @@
     <button class="btn primary" type="submit">Save secret</button></form>
   {% if config.BASE_URL.startswith('http://localhost') %}<p class="notice warn mt">Your base URL is {{ config.BASE_URL }}. Resend can't reach localhost; set GM_BASE_URL to your public https address.</p>{% endif %}
 </section>
-<section class="card"><h2>AI assistant</h2>
+</details>
+<details class="more card"><summary>More: AI assistant and reference data</summary>
+<section><h3>AI assistant</h3>
   <p>Current provider: {% if ai_provider == 'anthropic' %}<span class="badge ok">Claude · {{ ai_model }}</span>{% elif ai_provider == 'mock' %}<span class="badge sim">Mock (sandbox)</span>{% else %}<span class="badge">Free rule-based assistant</span>{% endif %}</p>
   <p class="muted">AI keys are system-wide and set by a system administrator (environment variable <code>GM_ANTHROPIC_API_KEY</code> or System administration → keys). AI is optional; the rule-based assistant always works. Usage is capped per workspace in Settings.</p>
 </section>
-<section class="card"><h2>Reference data</h2>
+<section><h3>Reference data</h3>
   <p>Disposable-domain list: {{ '{:,}'.format(disposable.count) }} domains · {{ disposable.get('license', '') }} · updated {{ disposable.get('updated', 'unknown') }}</p>
   <p class="muted"><small>Source: {{ disposable.source }}</small></p>
   {% if current_user().is_superadmin %}<form method="post">{{ csrf() }}<input type="hidden" name="action" value="update_disposable"><button class="btn" type="submit">Download the latest list</button></form>{% endif %}
 </section>
+</details>
 </div>
 {% endblock %}

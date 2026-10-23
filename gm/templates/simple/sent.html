@@ -8,6 +8,21 @@
 {% if ws.sandbox_mode %}<div class="notice sim">Practice mode is on: nothing is really sent. Turn it off in Settings → Connections when you're ready.</div>{% endif %}
 {% if next_step and can('manage_settings') %}<div class="notice info">Setup: <a href="{{ next_step.url }}">{{ next_step.label }}</a> · <small>{{ next_step.help }}</small></div>{% endif %}
 
+{% if my_drafts %}
+<h2 class="mt">Drafts</h2>
+<div class="mail-list" style="margin-bottom:18px">
+  {% for d in my_drafts %}
+  <a class="mail-row" href="{{ url_for('simple.compose', draft=d.id) }}">
+    <span class="mail-to" style="color:var(--bad)">Draft</span>
+    <span class="mail-subject"><strong>{{ d.name }}</strong> <span class="muted">– {{ (d.preview or '')[:110].replace('
+', ' ') }}</span></span>
+    <span class="mail-stats"><span class="btn small">Continue</span></span>
+    <span class="mail-date muted">{{ d.updated_at[5:16] }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% if rows %}<h2>Sent</h2>{% endif %}
+{% endif %}
 {% if rows %}
 <div class="mail-list">
   {% for r in rows %}

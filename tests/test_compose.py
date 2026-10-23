@@ -67,9 +67,17 @@ class Compose(AppCase):
         execute("UPDATE workspaces SET company_address = ''")
         r = self.send()
         self.assertEqual(r.status_code, 400)
-        self.assertIn("postal address", r.get_data(as_text=True))
-        self.assertEqual(scalar("SELECT COUNT(*) FROM campaigns"), 0)
+        self.assertIn("business address", r.get_data(as_text=True))
+        self.assertEqual(scalar("SELECT status FROM campaigns"), "draft", "your email is kept as a draft, not lost")
         self.assertEqual(self.provider.sent, [])
+        # Filling the address in on the Compose page fixes it and sends the same draft.
+        draft_id = scalar("SELECT id FROM campaigns")
+        r = self.send(draft_id=str(draft_id), company_address="5 Real Road, Lagos")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(scalar("SELECT company_address FROM workspaces"), "5 Real Road, Lagos")
+        self.assertEqual(scalar("SELECT COUNT(*) FROM campaigns"), 1)
+        self.run_jobs()
+        self.assertEqual(len(self.provider.sent), 1)
 
     def test_suppressed_and_unsubscribed_are_skipped(self):
         from gm.suppression import add_suppression
@@ -116,3 +124,68 @@ class Compose(AppCase):
         self.assertEqual(r.headers["Location"], f"/sent/{cid}")
         self.run_jobs()
         self.assertEqual(self.provider.sent, [])
+
+
+class EasierBasics(AppCase):
+    def setUp(self):
+        super().setUp()
+        self.login()
+
+    def test_save_draft_and_continue(self):
+        from gm.db import query
+        r = self.post("/compose", {"to_mode": "paste", "pasted": "x@good.test", "subject": "Half written",
+                                   "body": "Hi", "from_name": "Olive", "action": "save"})
+        self.assertEqual(r.status_code, 302)
+        d = query("SELECT * FROM campaigns", one=True)
+        self.assertEqual((d["status"], d["style"]), ("draft", "plain"))
+        self.assertIn("Half written", self.client.get("/sent").get_data(as_text=True))
+        page = self.client.get(f"/compose?draft={d['id']}").get_data(as_text=True)
+        self.assertIn('value="Half written"', page)
+        self.assertIn("x@good.test", page)
+        self.post(f"/compose/drafts/{d['id']}/delete")
+        self.assertIsNone(query("SELECT 1 FROM campaigns", one=True))
+
+    def test_new_contact_and_import_are_emailable_by_default(self):
+        import io
+        from gm.campaigns import eligibility
+        from gm.db import query
+        self.post("/contacts/new", {"email": "new@good.test", "recipient_type": "business",
+                                    "lawful_basis": "legitimate_interest", "dns": "on"})
+        self.assertIn('value="legitimate_interest" selected', self.client.get("/contacts/new").get_data(as_text=True))
+        c = query("SELECT * FROM contacts WHERE email = 'new@good.test'", one=True)
+        self.assertTrue(eligibility(c)[0])
+        r = self.post("/contacts/import", {"file": (io.BytesIO(b"email\nimp@good.test\n"), "list.csv")},
+                      content_type="multipart/form-data")
+        imp = int(r.headers["Location"].split("/")[-2])
+        page = self.client.get(f"/contacts/import/{imp}/map").get_data(as_text=True)
+        self.assertIn('value="legitimate_interest" selected', page)
+        self.assertNotIn('name="purpose" required', page)
+        self.post(f"/contacts/import/{imp}/map", {"col_0": "email", "recipient_type": "business",
+                                                  "lawful_basis": "legitimate_interest", "dns": "on"})
+        self.run_jobs()
+        c = query("SELECT * FROM contacts WHERE email = 'imp@good.test'", one=True)
+        self.assertTrue(eligibility(c)[0])
+        self.assertEqual(c["purpose"], "Business outreach")
+
+    def test_one_click_fix_for_contacts_without_permission(self):
+        from gm.db import query
+        self.contact("old@good.test", lawful_basis="unknown")
+        self.assertIn("can't be emailed yet", self.client.get("/compose").get_data(as_text=True))
+        self.post("/compose/mark-business")
+        self.assertEqual(query("SELECT lawful_basis FROM contacts", one=True)["lawful_basis"], "legitimate_interest")
+
+    def test_settings_one_form_and_connections_one_form(self):
+        from gm.db import query
+        self.post("/settings/", {"section": "details", "sender_name": "Olive", "sender_email": "olive@sender.test",
+                                 "reply_to": "", "company_name": "Acme", "company_address": "9 New St"})
+        ws = query("SELECT * FROM workspaces", one=True)
+        self.assertEqual((ws["sender_email"], ws["reply_to"], ws["company_address"]),
+                         ("olive@sender.test", "olive@sender.test", "9 New St"))
+        self.use_fake_provider = True
+        self.post("/settings/integrations", {"action": "email_service", "api_key": "re_abcdefghijklmnop"})
+        ws = query("SELECT * FROM workspaces", one=True)
+        self.assertEqual(ws["sandbox_mode"], 0, "unticked practice mode + a key = live")
+        self.post("/settings/integrations", {"action": "email_service", "api_key": "", "sandbox_mode": "on"})
+        self.assertEqual(query("SELECT sandbox_mode FROM workspaces", one=True)["sandbox_mode"], 1)
+        from gm.security import get_secret
+        self.assertEqual(get_secret(self.ws_id, "resend_api_key"), "re_abcdefghijklmnop", "empty field keeps the key")

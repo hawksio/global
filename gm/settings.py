@@ -23,7 +23,20 @@ def index():
     if request.method == "POST":
         f = request.form
         section = f.get("section")
-        if section == "company":
+        if section == "details":
+            values = {k: f.get(k, "").strip() for k in ("sender_name", "sender_email", "reply_to", "company_name",
+                                                        "company_address")}
+            for key in ("sender_email", "reply_to"):
+                values[key] = values[key].lower()
+                if values[key] and not validation.syntax_check(values[key])[0]:
+                    flash(f"{values[key]} is not a valid email address.", "error")
+                    return redirect(url_for("settings.index"))
+            values["reply_to"] = values["reply_to"] or values["sender_email"]
+            execute("UPDATE workspaces SET sender_name = ?, sender_email = ?, reply_to = ?, company_name = ?, "
+                    "company_address = ? WHERE id = ?",
+                    (values["sender_name"][:100], values["sender_email"], values["reply_to"], values["company_name"][:120],
+                     values["company_address"][:300], ws["id"]))
+        elif section == "company":
             color = f.get("brand_color", "#2563eb")
             logo = f.get("logo_url", "").strip()[:300]
             if not HEX.match(color):
@@ -90,7 +103,26 @@ def integrations():
     ws = workspace()
     if request.method == "POST":
         action = request.form.get("action")
-        if action == "resend_key":
+        if action == "email_service":
+            key = request.form.get("api_key", "").strip()
+            if key and not re.fullmatch(r"re_[A-Za-z0-9_]{10,200}", key):
+                flash("That doesn't look like a Resend API key (they start with re_).", "error")
+                return redirect(url_for("settings.integrations"))
+            if key:
+                set_secret(ws["id"], "resend_api_key", key, current_user()["id"])
+                audit("integration.resend_key", detail="set")
+            has_key = bool(key or get_secret(ws["id"], "resend_api_key"))
+            practice = request.form.get("sandbox_mode") == "on" or not has_key
+            execute("UPDATE workspaces SET sandbox_mode = ? WHERE id = ?", (int(practice), ws["id"]))
+            audit("integration.sandbox", detail="on" if practice else "off")
+            if has_key:
+                ok, message = mailer.ResendProvider(key or get_secret(ws["id"], "resend_api_key")).test_connection()
+                flash(("Saved. " if ok else "Saved, but the connection test failed: ") + message +
+                      (" Practice mode is on: nothing is really sent." if practice else " Live: emails really send."),
+                      "success" if ok else "error")
+            else:
+                flash("Saved. Add your Resend API key to send real email; until then everything is practice.", "info")
+        elif action == "resend_key":
             key = request.form.get("api_key", "").strip()
             if key and not re.fullmatch(r"re_[A-Za-z0-9_]{10,200}", key):
                 flash("That doesn't look like a Resend API key (they start with re_).", "error")
