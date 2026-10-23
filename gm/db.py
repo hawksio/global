@@ -501,11 +501,22 @@ CREATE INDEX IF NOT EXISTS ix_recipients_contact ON campaign_recipients(contact_
 CREATE INDEX IF NOT EXISTS ix_contacts_ws_import ON contacts(workspace_id, import_id);
 """
 
+M5_SMTP = """
+-- A second way to send: any SMTP server. email_provider is the default service ('resend' or 'smtp');
+-- the SMTP password is stored encrypted in secrets (smtp_password).
+ALTER TABLE workspaces ADD COLUMN email_provider TEXT NOT NULL DEFAULT 'resend';
+ALTER TABLE workspaces ADD COLUMN smtp_host TEXT NOT NULL DEFAULT '';
+ALTER TABLE workspaces ADD COLUMN smtp_port INTEGER NOT NULL DEFAULT 587;
+ALTER TABLE workspaces ADD COLUMN smtp_security TEXT NOT NULL DEFAULT 'starttls';
+ALTER TABLE workspaces ADD COLUMN smtp_username TEXT NOT NULL DEFAULT '';
+"""
+
 MIGRATIONS = [
     (1, "initial schema", M1_INITIAL),
     (2, "campaign email style", M2_PLAIN_STYLE),
     (3, "recipient wait reason", M3_WAIT_REASON),
     (4, "indexes for fast delete", M4_FAST_DELETE),
+    (5, "smtp sending", M5_SMTP),
 ]
 
 _migrate_lock = threading.Lock()

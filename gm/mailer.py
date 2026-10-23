@@ -1,7 +1,8 @@
 """Email providers and the message log.
 
-Two providers implement the same interface:
+Three providers implement the same interface:
   ResendProvider  - real sending through the official Resend Python SDK.
+  SmtpProvider    - real sending through any SMTP server.
   SandboxProvider - writes each message to instance/outbox/ and sends nothing. Its messages are stored with
                     status 'simulated' so they can never be mistaken for real deliveries.
 
@@ -52,6 +53,9 @@ class SandboxProvider:
 
     def test_connection(self):
         return True, "Practice mode: messages are written to the local outbox and never sent."
+
+    def close(self):
+        pass
 
     def domains(self):
         return []
@@ -115,6 +119,9 @@ class ResendProvider:
         names = ", ".join(f"{d.get('name')} ({d.get('status')})" for d in data if isinstance(d, dict)) or "no domains yet"
         return True, f"Connected. Domains: {names}"
 
+    def close(self):
+        pass
+
     def domains(self):
         try:
             resp = self._call(lambda r: r.Domains.list())
@@ -124,20 +131,146 @@ class ResendProvider:
         return [d for d in data if isinstance(d, dict)]
 
 
+class SmtpProvider:
+    """Any SMTP server (your hosting mailbox, Gmail/Workspace, Outlook, Zoho, Brevo, Mailgun, SES...).
+    One connection is reused for a whole sending batch; call close() when done. SMTP has no delivery webhooks,
+    so messages stay "accepted"; bounces come back to the sending mailbox as normal emails."""
+    name = "smtp"
+
+    def __init__(self, host, port, security, username, password):
+        self.host, self.port, self.security = host, int(port or 587), security or "starttls"
+        self.username, self.password = username, password
+        self._conn = None
+
+    def _connect(self):
+        import smtplib
+        import ssl
+        ctx = ssl.create_default_context()
+        if self.security == "ssl":
+            conn = smtplib.SMTP_SSL(self.host, self.port, timeout=20, context=ctx)
+        else:
+            conn = smtplib.SMTP(self.host, self.port, timeout=20)
+            conn.ehlo()
+            if self.security == "starttls":
+                conn.starttls(context=ctx)
+                conn.ehlo()
+        if self.username:
+            conn.login(self.username, self.password)
+        return conn
+
+    def _message(self, payload):
+        from email.message import EmailMessage
+        from email.utils import formatdate, make_msgid, parseaddr
+        msg = EmailMessage()
+        msg["From"] = payload["from"]
+        msg["To"] = ", ".join(payload["to"])
+        msg["Subject"] = payload["subject"]
+        msg["Date"] = formatdate(localtime=False)
+        domain = parseaddr(payload["from"])[1].rpartition("@")[2] or None
+        msg["Message-ID"] = make_msgid(domain=domain)
+        if payload.get("reply_to"):
+            msg["Reply-To"] = payload["reply_to"]
+        for k, v in (payload.get("headers") or {}).items():
+            msg[k] = v
+        msg.set_content(payload.get("text") or "")
+        if payload.get("html"):
+            msg.add_alternative(payload["html"], subtype="html")
+        return msg
+
+    def send(self, payload, idempotency_key):
+        import smtplib
+        import socket
+        msg = self._message(payload)
+        for attempt in (1, 2):  # the server may have dropped an idle reused connection
+            try:
+                if self._conn is None:
+                    self._conn = self._connect()
+                self._conn.send_message(msg)
+                return SendResult(ok=True, provider_id=msg["Message-ID"].strip("<>"))
+            except smtplib.SMTPServerDisconnected:
+                self._conn = None
+                if attempt == 2:
+                    return SendResult(ok=False, error="The SMTP server closed the connection", transient=True)
+            except smtplib.SMTPAuthenticationError as exc:
+                self.close()
+                return SendResult(ok=False, error=f"SMTP login failed: {_smtp_text(exc)}", auth_error=True)
+            except smtplib.SMTPRecipientsRefused as exc:
+                code, text = next(iter(exc.recipients.values()), (550, b""))
+                return SendResult(ok=False, error=f"Recipient refused ({code}): {_smtp_text(text)}",
+                                  transient=400 <= code < 500)
+            except smtplib.SMTPResponseException as exc:
+                self.close()
+                return SendResult(ok=False, error=f"SMTP error {exc.smtp_code}: {_smtp_text(exc.smtp_error)}",
+                                  transient=400 <= exc.smtp_code < 500)
+            except (socket.timeout, OSError, smtplib.SMTPException) as exc:
+                self.close()
+                return SendResult(ok=False, error=f"Could not reach the SMTP server: {type(exc).__name__}", transient=True)
+
+    def close(self):
+        if self._conn is not None:
+            try:
+                self._conn.quit()
+            except Exception:
+                pass
+            self._conn = None
+
+    def test_connection(self):
+        try:
+            self._connect().quit()
+        except Exception as exc:
+            import smtplib
+            if isinstance(exc, smtplib.SMTPAuthenticationError):
+                return False, f"The server rejected the username or password: {_smtp_text(exc)}"
+            return False, f"Could not connect to {self.host}:{self.port} ({type(exc).__name__}). Check the server, port and security."
+        return True, f"Connected and signed in to {self.host}:{self.port}."
+
+    def domains(self):
+        return None
+
+
+def _smtp_text(value):
+    value = getattr(value, "smtp_error", value)
+    text = value.decode(errors="replace") if isinstance(value, bytes) else str(value)
+    return " ".join(text.split())[:250]
+
+
 def _clean(exc):
     text = str(getattr(exc, "message", "") or exc)
     return re.sub(r"re_[A-Za-z0-9_]{6,}", "re_…", text)[:300]  # never echo a key back into logs or the UI
 
 
 # ---------------------------------------------------------------- provider selection
+SERVICES = {"resend": "Resend", "smtp": "SMTP"}
+
+
+def configured_provider(ws, name):
+    """The named service for this workspace, or None if it isn't set up."""
+    if name == "resend":
+        key = get_secret(ws["id"], "resend_api_key")
+        return ResendProvider(key) if key else None
+    if name == "smtp" and ws["smtp_host"]:
+        return SmtpProvider(ws["smtp_host"], ws["smtp_port"], ws["smtp_security"], ws["smtp_username"],
+                            get_secret(ws["id"], "smtp_password"))
+    return None
+
+
+def live_provider(ws):
+    """The default service if it's set up, otherwise the other one; None when neither is."""
+    default = ws["email_provider"] if ws["email_provider"] in SERVICES else "resend"
+    for name in [default] + [n for n in SERVICES if n != default]:
+        p = configured_provider(ws, name)
+        if p:
+            return p
+    return None
+
+
 def workspace_provider(ws):
     override = current_app.config.get("MAIL_PROVIDER_FACTORY")
     if override:
         return override("marketing", ws)
     if ws["sandbox_mode"]:
         return SandboxProvider()
-    key = get_secret(ws["id"], "resend_api_key")
-    return ResendProvider(key) if key else SandboxProvider()
+    return live_provider(ws) or SandboxProvider()
 
 
 def transactional_provider():
@@ -145,7 +278,11 @@ def transactional_provider():
     if override:
         return override("transactional", None)
     key = current_app.config["RESEND_API_KEY"] or get_secret(0, "resend_api_key")
-    return ResendProvider(key) if key else SandboxProvider()
+    if key:
+        return ResendProvider(key)
+    # Single-business installs: fall back to the main workspace's own email service for sign-in codes.
+    ws = query("SELECT * FROM workspaces ORDER BY id LIMIT 1", one=True)
+    return (live_provider(ws) if ws else None) or SandboxProvider()
 
 
 # ---------------------------------------------------------------- message log

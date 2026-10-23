@@ -101,8 +101,9 @@ def run_checks(ws, domain):
         prov = mailer.workspace_provider(ws)
         domains = prov.domains() if prov.name == "resend" else None
     if domains is None:
-        r["provider"] = {"status": "unknown", "evidence": "Practice mode or no Resend API key, so the provider was not asked",
-                         "advice": "Connect Resend under Integrations to check the domain's verification status."}
+        r["provider"] = {"status": "unknown", "evidence": "Practice mode, SMTP or no Resend API key, so the provider was not asked",
+                         "advice": "With Resend connected, its domain verification status is checked here. With SMTP, "
+                                   "make sure your SPF record includes your SMTP server and DKIM is on in your hosting."}
     else:
         match = next((d for d in domains if d.get("name") == domain), None)
         r["provider"] = ({"status": "pass", "evidence": f"Resend reports {domain} as {match.get('status')}",

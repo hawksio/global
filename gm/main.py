@@ -20,8 +20,8 @@ def onboarding_steps(ws):
         {"key": "sender", "label": "Choose who your emails come from", "done": bool(ws["sender_email"] and ws["sender_name"]),
          "help": "The name and address your emails come from. Use a domain you control.",
          "url": url_for("main.onboarding", step="sender")},
-        {"key": "resend", "label": "Connect your email service (or keep practising)", "done": bool(get_secret(wid, "resend_api_key")),
-         "help": "Until you connect Resend, everything is a practice run and nothing is really sent.",
+        {"key": "resend", "label": "Connect your email service (or keep practising)", "done": bool(mailer.live_provider(ws)),
+         "help": "Until you connect Resend or your SMTP server, everything is a practice run and nothing is really sent.",
          "url": url_for("settings.integrations")},
         {"key": "domain", "label": "Check your email domain is set up", "done": bool(scalar("SELECT 1 FROM dns_checks WHERE workspace_id = ? "
                                                                                   "AND score >= 60", (wid,))),

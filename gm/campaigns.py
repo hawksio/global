@@ -769,7 +769,14 @@ def process_campaign(c, ws, budget):
     simulate = bool(c["dry_run"] or ws["sandbox_mode"])
     provider = mailer.SandboxProvider() if simulate else mailer.workspace_provider(ws)
     if not simulate and provider.name == "sandbox":
-        return 0, "Real sending needs a Resend API key (Integrations) or the campaign must be a practice run."
+        return 0, "Real sending needs an email service (Resend or SMTP under Connections) or the campaign must be a practice run."
+    try:
+        return _process_campaign(c, ws, budget, simulate, provider)
+    finally:
+        getattr(provider, "close", lambda: None)()  # SMTP keeps one connection open for the whole batch
+
+
+def _process_campaign(c, ws, budget, simulate, provider):
     if c["status"] == "scheduled":
         execute("UPDATE campaigns SET status = 'sending' WHERE id = ? AND status = 'scheduled'", (c["id"],))
     limit = min(budget, c["rate_per_minute"])
@@ -808,7 +815,7 @@ def process_campaign(c, ws, budget):
         if result is not None:
             sent += 1
             if result.auth_error:
-                return sent, f"The sending service rejected the API key: {result.error}"
+                return sent, f"The sending service rejected the API key or login: {result.error}"
     remaining = scalar("SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status = 'active'", (c["id"],))
     queued = scalar("SELECT COUNT(*) FROM messages WHERE campaign_id = ? AND status = 'queued'", (c["id"],))
     if not remaining and not queued:
@@ -845,7 +852,7 @@ def retry_messages(ws, budget):
             execute("UPDATE campaign_recipients SET status = 'stopped', stop_reason = ? WHERE id = ?",
                     (f"Send failed: {result.error}"[:200], r["id"]))
         if result.auth_error:
-            pause_workspace(ws, f"The sending service rejected the API key: {result.error}")
+            pause_workspace(ws, f"The sending service rejected the API key or login: {result.error}")
             break
     return n
 

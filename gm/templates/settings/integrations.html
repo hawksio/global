@@ -2,18 +2,54 @@
 {% block title %}Connections{% endblock %}
 {% block content %}
 <div class="page-head"><div><h1>Connections</h1><p>Your keys are stored encrypted and never shown again.</p></div></div>
-<form method="post" class="card" style="max-width:760px">{{ csrf() }}<input type="hidden" name="action" value="email_service">
-  <h2>Email service (Resend)</h2>
-  <p>Status: {% if resend_hint %}<span class="badge ok">Connected</span> <small class="muted">key {{ resend_hint.hint }}</small>{% else %}<span class="badge">Not connected</span>{% endif %}
+<div style="max-width:760px">
+<section class="card">
+  <h2>Sending service</h2>
+  <p>Status: {% if active_service %}<span class="badge ok">Sending with {{ SERVICES[active_service] }}</span>{% else %}<span class="badge">No service connected</span>{% endif %}
     · {% if ws.sandbox_mode %}<span class="badge sim">Practice mode: nothing is sent</span>{% else %}<span class="badge ok">Live: emails really send</span>{% endif %}</p>
+  <form method="post" class="actions">{{ csrf() }}<input type="hidden" name="action" value="default_service">
+    <span>Default:</span>
+    {% for k, v in SERVICES.items() %}<label class="check" style="margin:0"><input type="radio" name="email_provider" value="{{ k }}" {% if ws.email_provider == k %}checked{% endif %}> <span>{{ v }}{% if (k == 'resend' and resend_hint) or (k == 'smtp' and ws.smtp_host) %} <small class="muted">(set up)</small>{% endif %}</span></label>{% endfor %}
+    <button class="btn small" type="submit">Use as default</button></form>
+  <p class="muted"><small>If the default isn't set up, the other service is used automatically.</small></p>
+  <form method="post">{{ csrf() }}<input type="hidden" name="action" value="sandbox">
+    <label class="check"><input type="checkbox" name="sandbox_mode" {% if ws.sandbox_mode %}checked{% endif %}> <span><strong>Practice mode</strong>: try everything without sending real email. Untick to go live.</span></label>
+    <button class="btn small" type="submit">Save</button>
+  </form>
+</section>
+
+<details class="more card"{% if ws.email_provider == 'resend' or not ws.smtp_host %} open{% endif %}><summary>Resend {% if resend_hint %}<span class="badge ok">Connected</span>{% endif %}</summary>
+<form method="post">{{ csrf() }}<input type="hidden" name="action" value="email_service">
+  {% if ws.sandbox_mode %}<input type="hidden" name="sandbox_mode" value="on">{% endif %}
   <div class="field"><label for="api_key">{{ 'Replace API key (leave empty to keep the current one)' if resend_hint else 'Resend API key' }}</label>
     <input id="api_key" type="password" name="api_key" autocomplete="off" placeholder="re_…">
-    <div class="help">Create one in your Resend dashboard (API Keys → Create, “Sending access”).</div></div>
-  <label class="check"><input type="checkbox" name="sandbox_mode" {% if ws.sandbox_mode %}checked{% endif %}> <span><strong>Practice mode</strong>: try everything without sending real email. Untick to go live.</span></label>
-  <button class="btn primary" type="submit">Save</button> <small class="muted">Saving also tests the connection.</small>
+    <div class="help">{% if resend_hint %}Current key {{ resend_hint.hint }}. {% endif %}Create one in your Resend dashboard (API Keys → Create, “Sending access”). Best for tracking: deliveries, bounces and spam reports come back automatically.</div></div>
+  <button class="btn primary" type="submit">Save and test</button>
 </form>
+</details>
+
+<details class="more card"{% if ws.email_provider == 'smtp' and ws.smtp_host %} open{% endif %}><summary>SMTP (your own mail server) {% if ws.smtp_host %}<span class="badge ok">Set up</span>{% endif %}</summary>
+<form method="post">{{ csrf() }}<input type="hidden" name="action" value="smtp">
+  <p class="muted">Use the mailbox from your hosting (cPanel / Truehost), Google Workspace, Outlook, Zoho, Brevo, Mailgun, Amazon SES or any other SMTP service.</p>
+  <div class="row">
+    <div class="field"><label for="smtp_host">Server</label><input id="smtp_host" type="text" name="smtp_host" value="{{ ws.smtp_host }}" placeholder="mail.yourdomain.com" autocomplete="off"></div>
+    <div class="field"><label for="smtp_security">Security</label><select id="smtp_security" name="smtp_security">
+      {% for k, v in [('ssl', 'SSL/TLS (usually port 465)'), ('starttls', 'STARTTLS (usually port 587)'), ('none', 'None (not recommended)')] %}<option value="{{ k }}" {% if ws.smtp_security == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="smtp_port">Port</label><input id="smtp_port" type="number" name="smtp_port" value="{{ ws.smtp_port }}" min="1" max="65535"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label for="smtp_username">Username (usually the full email address)</label><input id="smtp_username" type="text" name="smtp_username" value="{{ ws.smtp_username }}" placeholder="{{ ws.sender_email or 'you@yourdomain.com' }}" autocomplete="off"></div>
+    <div class="field"><label for="smtp_password">{{ 'Password (leave empty to keep the saved one)' if smtp_hint else 'Password' }}</label><input id="smtp_password" type="password" name="smtp_password" autocomplete="new-password"></div>
+  </div>
+  <div class="help">Send from the same address you sign in with (Settings → Your sending email), or your server may refuse the email.
+    SMTP can't report deliveries, bounces or spam reports back: bounces arrive in that mailbox instead. Shared hosting often allows only 100–500 emails an hour; keep your hourly limit below that.</div>
+  <button class="btn primary" type="submit">Save and test</button>
+  {% if ws.smtp_host %}<button class="btn" type="submit" name="smtp_host" value="" data-confirm="Remove the SMTP settings?">Remove</button>{% endif %}
+</form>
+</details>
+</div>
 <div style="max-width:760px">
-<details class="more card"><summary>Delivery tracking (optional): see deliveries, bounces and spam reports</summary>
+<details class="more card"><summary>Delivery tracking for Resend (optional): see deliveries, bounces and spam reports</summary>
 <section><h3>Resend webhook</h3>
   <p>Without it, delivery, bounces and complaints can't be tracked, and hard bounces won't be suppressed automatically.</p>
   <ol><li>In Resend → Webhooks, add this endpoint:</li></ol>

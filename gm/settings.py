@@ -112,7 +112,7 @@ def integrations():
                 set_secret(ws["id"], "resend_api_key", key, current_user()["id"])
                 audit("integration.resend_key", detail="set")
             has_key = bool(key or get_secret(ws["id"], "resend_api_key"))
-            practice = request.form.get("sandbox_mode") == "on" or not has_key
+            practice = request.form.get("sandbox_mode") == "on" or not (has_key or mailer.live_provider(ws))
             execute("UPDATE workspaces SET sandbox_mode = ? WHERE id = ?", (int(practice), ws["id"]))
             audit("integration.sandbox", detail="on" if practice else "off")
             if has_key:
@@ -120,8 +120,43 @@ def integrations():
                 flash(("Saved. " if ok else "Saved, but the connection test failed: ") + message +
                       (" Practice mode is on: nothing is really sent." if practice else " Live: emails really send."),
                       "success" if ok else "error")
+            elif not practice:
+                flash("Saved. Live: emails really send through SMTP.", "success")
             else:
-                flash("Saved. Add your Resend API key to send real email; until then everything is practice.", "info")
+                flash("Saved. Connect Resend or SMTP to send real email; until then everything is practice.", "info")
+        elif action == "smtp":
+            host = request.form.get("smtp_host", "").strip().lower()
+            security = request.form.get("smtp_security", "starttls")
+            port = request.form.get("smtp_port", "").strip()
+            if host and not re.fullmatch(r"[a-z0-9.-]{3,253}", host):
+                flash("Enter just the server name, e.g. mail.yourdomain.com (no https:// or slashes).", "error")
+                return redirect(url_for("settings.integrations"))
+            if security not in ("starttls", "ssl", "none") or (port and not port.isdigit()):
+                abort(400)
+            port = int(port) if port else (465 if security == "ssl" else 587)
+            execute("UPDATE workspaces SET smtp_host = ?, smtp_port = ?, smtp_security = ?, smtp_username = ? WHERE id = ?",
+                    (host, port, security, request.form.get("smtp_username", "").strip()[:200], ws["id"]))
+            password = request.form.get("smtp_password", "")
+            if password or not host:
+                set_secret(ws["id"], "smtp_password", password if host else "", current_user()["id"])
+            audit("integration.smtp", detail=f"{host}:{port} {security}" if host else "removed")
+            if not host:
+                flash("SMTP removed.", "success")
+            else:
+                ws = query("SELECT * FROM workspaces WHERE id = ?", (ws["id"],), one=True)
+                ok, message = mailer.configured_provider(ws, "smtp").test_connection()
+                flash(("Saved. " if ok else "Saved, but the test failed: ") + message, "success" if ok else "error")
+        elif action == "default_service":
+            choice = request.form.get("email_provider")
+            if choice not in mailer.SERVICES:
+                abort(400)
+            if not mailer.configured_provider(ws, choice):
+                flash(f"Set up {mailer.SERVICES[choice]} first, then make it the default.", "error")
+                return redirect(url_for("settings.integrations"))
+            execute("UPDATE workspaces SET email_provider = ? WHERE id = ?", (choice, ws["id"]))
+            audit("integration.default_service", detail=choice)
+            flash(f"{mailer.SERVICES[choice]} is now your default. If it stops working, set up the other one as a backup.",
+                  "success")
         elif action == "resend_key":
             key = request.form.get("api_key", "").strip()
             if key and not re.fullmatch(r"re_[A-Za-z0-9_]{10,200}", key):
@@ -145,8 +180,8 @@ def integrations():
             flash(message, "success" if ok else "error")
         elif action == "sandbox":
             on = request.form.get("sandbox_mode") == "on"
-            if not on and not get_secret(ws["id"], "resend_api_key"):
-                flash("Add a Resend API key before turning off practice mode.", "error")
+            if not on and not mailer.live_provider(ws):
+                flash("Connect Resend or SMTP before turning off practice mode.", "error")
                 return redirect(url_for("settings.integrations"))
             execute("UPDATE workspaces SET sandbox_mode = ? WHERE id = ?", (int(on), ws["id"]))
             audit("integration.sandbox", detail="on" if on else "off")
@@ -165,7 +200,10 @@ def integrations():
         return redirect(url_for("settings.integrations"))
     from .ai import provider
     p = provider()
+    active = mailer.live_provider(ws)
     return render_template("settings/integrations.html", ws=ws, resend_hint=secret_hint(ws["id"], "resend_api_key"),
+                           smtp_hint=secret_hint(ws["id"], "smtp_password"), SERVICES=mailer.SERVICES,
+                           active_service=active.name if active else None,
                            webhook_hint=secret_hint(ws["id"], "resend_webhook_secret"),
                            webhook_url=current_app.config["BASE_URL"] + url_for("webhooks.resend_workspace",
                                                                                 public_id=ws["public_id"]),
