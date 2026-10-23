@@ -109,8 +109,11 @@ class Security(AppCase):
         self.assertIn('aria-label="Main navigation"', page)
         import re
         sidebar = page[page.index('<ul class="nav">'):page.index("</ul>")]
-        self.assertEqual(re.findall(r"</span>([^<]+)</a>", sidebar),
-                         ["Home", "Contacts", "Emails", "Campaigns", "Reports", "Settings"])
+        self.assertEqual(re.findall(r"</span>([^<]+)</a>", sidebar), ["Sent", "Contacts", "Settings"])
+        self.assertIn("Compose</a>", page)
+        more = page[page.index('class="nav-more"'):page.index("</details>", page.index('class="nav-more"'))]
+        self.assertEqual(re.findall(r"</span>([^<]+)</a>", more),
+                         ["Dashboard", "Saved emails &amp; assistant", "Campaigns (advanced)", "Reports"])
         # Every feature stays one click away as a tab inside its section.
         expected = {"/contacts/": ["All contacts", "Import a file", "Find on websites", "Check emails", "Clean up list",
                                    "Do-not-email list"],

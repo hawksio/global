@@ -318,9 +318,10 @@ def readiness(ws, c):
         "Set a sender email and your company's postal address in Settings." if not (c["from_email"] and ws["company_address"])
         else f"From {c['from_name']} <{c['from_email']}>.")
     real = not c["dry_run"] and not ws["sandbox_mode"]
-    add("8. Test email sent", c["test_sent_at"] or not real,
-        f"Test sent {c['test_sent_at']} UTC." if c["test_sent_at"] else "Send yourself a test email first." if real
-        else "Optional for a practice run.", blocking=real)
+    plain = c["style"] == "plain"  # Compose: a test is recommended, not required (like Gmail)
+    add("8. Test email sent", c["test_sent_at"] or not real or plain,
+        f"Test sent {c['test_sent_at']} UTC." if c["test_sent_at"] else "Send yourself a test email first." if real and not plain
+        else "Optional." if plain else "Optional for a practice run.", blocking=real and not plain)
     if real:
         domain = c["from_email"].rsplit("@", 1)[-1] if "@" in c["from_email"] else ""
         check = latest_check(ws["id"], domain)
@@ -694,7 +695,8 @@ def check_thresholds(ws):
 def _payload(c, ws, contact, step, message_id):
     wsx = dict(ws, sender_name=c["from_name"] or ws["sender_name"])
     subj, html_out, text_out, headers = render.build_marketing(wsx, contact, step["subject"], step["html_body"],
-                                                               step["text_body"], step["preheader"], message_id=message_id)
+                                                               step["text_body"], step["preheader"], message_id=message_id,
+                                                               style=c["style"])
     payload = {"from": f"{c['from_name'] or ws['sender_name'] or ws['name']} <{c['from_email']}>", "to": [contact["email"]],
                "subject": subj, "html": html_out, "text": text_out, "headers": headers,
                "tags": [{"name": "category", "value": "marketing"}, {"name": "campaign", "value": str(c["id"])},

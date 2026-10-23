@@ -40,6 +40,17 @@ def onboarding_steps(ws):
 @bp.route("/")
 @login_required
 def overview():
+    """Home looks like Gmail's Sent folder: what you've sent, with a big Compose button."""
+    user = current_user()
+    if not user["workspace_id"]:
+        return redirect(url_for("admin.system"))
+    from .simple import sent_page
+    return sent_page()
+
+
+@bp.route("/dashboard")
+@login_required
+def dashboard():
     user = current_user()
     if not user["workspace_id"]:
         return redirect(url_for("admin.system"))

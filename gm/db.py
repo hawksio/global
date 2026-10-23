@@ -482,8 +482,14 @@ CREATE TABLE ai_usage (
 CREATE INDEX ix_ai_usage_ws ON ai_usage(workspace_id, created_at);
 """
 
+M2_PLAIN_STYLE = """
+-- 'plain' = a simple personal-looking email (sent from Compose); 'branded' = the designed newsletter layout.
+ALTER TABLE campaigns ADD COLUMN style TEXT NOT NULL DEFAULT 'branded';
+"""
+
 MIGRATIONS = [
     (1, "initial schema", M1_INITIAL),
+    (2, "campaign email style", M2_PLAIN_STYLE),
 ]
 
 _migrate_lock = threading.Lock()

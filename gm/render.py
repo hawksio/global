@@ -125,8 +125,49 @@ def wrap_html(body, preheader="", brand="#2563eb"):
             "sans-serif;color:#111827\">" + body + "</td></tr></table></td></tr></table></body></html>")
 
 
-def build_marketing(ws, contact, subject, html_body, text_body, preheader="", message_id=None, test=False):
-    """Returns (subject, html, text, headers) personalised for one contact."""
+def plain_footer_html(ws, unsub):
+    who = html.escape(ws["company_name"] or ws["name"])
+    addr = (" · " + html.escape(ws["company_address"]).replace("\n", ", ")) if ws["company_address"] else ""
+    return (f"<p style=\"margin-top:24px;font-size:12px;color:#888\">{who}{addr}<br>"
+            f"Prefer not to hear from me? <a href=\"{html.escape(unsub)}\" style=\"color:#888\">Unsubscribe</a>.</p>")
+
+
+def plain_footer_text(ws, unsub):
+    lines = ["", "", ws["company_name"] or ws["name"]]
+    if ws["company_address"]:
+        lines.append(ws["company_address"].replace("\n", ", "))
+    lines.append(f"Prefer not to hear from me? Unsubscribe: {unsub}")
+    return "\n".join(lines)
+
+
+def wrap_plain(body):
+    """Looks like an email typed in Gmail: no banner, no colours, no images, no tracking."""
+    return ("<!doctype html><html><head><meta charset=\"utf-8\"></head><body>"
+            "<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222\">"
+            + body + "</div></body></html>")
+
+
+def build_marketing(ws, contact, subject, html_body, text_body, preheader="", message_id=None, test=False, style="branded"):
+    """Returns (subject, html, text, headers) personalised for one contact.
+
+    style 'plain' produces a simple personal-looking email (best for one-to-one outreach and inbox placement);
+    'branded' wraps the body in the designed newsletter layout."""
+    if style == "plain":
+        c = dict(contact) if contact else {}
+        email_norm = (c.get("email_normalized") or c.get("email") or "test@example.com").lower()
+        unsub = unsubscribe_url(ws["id"], email_norm, message_id)
+        ctx = context_for(c, ws, unsub)
+        subj = fill(subject, ctx, escape=False).replace("\r", " ").replace("\n", " ").strip()
+        body_html = fill(strip_scripts(html_body), ctx, escape=True)
+        body_text = fill(text_body, ctx, escape=False) if text_body and text_body.strip() else html_to_text(body_html)
+        if test:
+            subj = "[TEST] " + subj
+        headers = {"List-Unsubscribe": f"<{unsub}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
+        return subj, wrap_plain(body_html + plain_footer_html(ws, unsub)), body_text + plain_footer_text(ws, unsub), headers
+    return _build_branded(ws, contact, subject, html_body, text_body, preheader, message_id, test)
+
+
+def _build_branded(ws, contact, subject, html_body, text_body, preheader="", message_id=None, test=False):
     c = dict(contact) if contact else {}
     email_norm = (c.get("email_normalized") or c.get("email") or "test@example.com").lower()
     unsub = unsubscribe_url(ws["id"], email_norm, message_id)

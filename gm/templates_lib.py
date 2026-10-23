@@ -217,10 +217,11 @@ def archive(template_id):
     return redirect(url_for("templates.index"))
 
 
-def send_test(ws, to_email, subject, html_body, text_body, preheader="", contact=None, kind="template_test"):
+def send_test(ws, to_email, subject, html_body, text_body, preheader="", contact=None, kind="template_test", style="branded"):
     """Send one [TEST] copy to a team member's own address (never to contacts). Returns (status, error)."""
     sample = contact or dict(render.SAMPLE_CONTACT, email_normalized=to_email.lower())
-    subj, html_out, text_out, headers = render.build_marketing(ws, sample, subject, html_body, text_body, preheader, test=True)
+    subj, html_out, text_out, headers = render.build_marketing(ws, sample, subject, html_body, text_body, preheader, test=True,
+                                                               style=style)
     key = f"test-{kind}-{secrets.token_hex(10)}"
     mid, _ = mailer.record_message(category="test", kind=kind, to_email=to_email, subject=subj, idempotency_key=key,
                                    workspace_id=ws["id"])

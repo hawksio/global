@@ -48,7 +48,12 @@ def fake_dns(records):
 
 DEFAULT_DNS = {("good.test", "MX"): ["10 mx.good.test."], ("sender.test", "MX"): ["10 mx.sender.test."],
                ("biz.test", "MX"): ["10 mx.biz.test."], ("other.test", "MX"): ["10 mx.other.test."],
-               ("mailinator.com", "MX"): ["10 mail.mailinator.com."]}
+               ("mailinator.com", "MX"): ["10 mail.mailinator.com."],
+               # sender.test is set up like a Resend-verified sending domain
+               ("send.sender.test", "TXT"): ['"v=spf1 include:amazonses.com ~all"'],
+               ("send.sender.test", "MX"): ["10 feedback-smtp.eu-west-1.amazonses.com."],
+               ("resend._domainkey.sender.test", "TXT"): ['"p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC"'],
+               ("_dmarc.sender.test", "TXT"): ['"v=DMARC1; p=quarantine"']}
 
 
 class AppCase(unittest.TestCase):

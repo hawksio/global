@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Sent{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Sent</h1></div>
+  {% if can('edit_campaigns') %}<a class="btn primary" href="{{ url_for('simple.compose') }}">✎ Compose</a>{% endif %}</div>
+
+{% if ws.sending_paused_reason %}<div class="notice bad"><strong>Sending is paused.</strong> {{ ws.sending_paused_reason }} <a href="{{ url_for('deliverability.index') }}">What to do</a></div>{% endif %}
+{% if ws.sandbox_mode %}<div class="notice sim">Practice mode is on: nothing is really sent. Turn it off in Settings → Connections when you're ready.</div>{% endif %}
+{% if next_step and can('manage_settings') %}<div class="notice info">Setup: <a href="{{ next_step.url }}">{{ next_step.label }}</a> · <small>{{ next_step.help }}</small></div>{% endif %}
+
+{% if rows %}
+<div class="mail-list">
+  {% for r in rows %}
+  <a class="mail-row" href="{{ url_for('simple.sent_detail', campaign_id=r.id) }}">
+    <span class="mail-to">To: {{ r.people }} {{ 'person' if r.people == 1 else 'people' }}</span>
+    <span class="mail-subject"><strong>{{ r.name }}</strong> <span class="muted">– {{ (r.preview or '')[:110].replace('\n', ' ') }}</span></span>
+    <span class="mail-stats">
+      <span class="badge {{ {'completed': 'ok', 'sending': 'info', 'paused': 'warn', 'cancelled': 'bad', 'pending_approval': 'warn', 'scheduled': 'info'}.get(r.status, '') }}">{{ SIMPLE_STATUS.get(r.status, r.status) }}</span>
+      {% if r.dry_run %}<span class="badge sim">practice</span>{% endif %}
+      <small class="muted">{{ r.sent }} sent{% if r.delivered %} · {{ r.delivered }} delivered{% endif %}{% if r.replied %} · {{ r.replied }} replied{% endif %}{% if r.problems %} · <span style="color:var(--bad)">{{ r.problems }} failed</span>{% endif %}</small>
+    </span>
+    <span class="mail-date muted">{{ (r.launched_at or r.updated_at)[5:16] }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty card"><h3>Nothing sent yet</h3><p>Write an email and send it to your contacts, just like in Gmail.</p>
+  {% if can('edit_campaigns') %}<a class="btn primary" href="{{ url_for('simple.compose') }}">✎ Compose your first email</a>{% endif %}</div>
+{% endif %}
+{% if drafts %}<p class="muted mt"><small>{{ drafts }} unfinished campaign(s) in <a href="{{ url_for('campaigns.index', status='draft') }}">More tools → Campaigns</a>.</small></p>{% endif %}
+{% endblock %}

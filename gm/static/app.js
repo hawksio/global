@@ -120,6 +120,15 @@
     lastField.selectionStart = lastField.selectionEnd = s + v.length;
   });
 
+  // Compose: only show the address box when "Type email addresses" is chosen
+  var toMode = document.getElementById("to_mode");
+  function syncTo() {
+    document.querySelectorAll("[data-show-when]").forEach(function (el) {
+      el.hidden = toMode.value !== el.getAttribute("data-show-when");
+    });
+  }
+  if (toMode) { toMode.addEventListener("change", syncTo); syncTo(); }
+
   // Auto-hide toasts
   setTimeout(function () {
     document.querySelectorAll(".toast.success").forEach(function (t) { t.remove(); });

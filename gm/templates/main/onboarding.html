@@ -4,7 +4,7 @@
 <div class="page-head"><div><h1>Set up your workspace</h1><p>Two quick steps, then you can explore safely in the sandbox.</p></div></div>
 <nav class="tabs"><a href="{{ url_for('main.onboarding', step='company') }}" {% if step == 'company' %}aria-current="page"{% endif %}>1. Company</a>
   <a href="{{ url_for('main.onboarding', step='sender') }}" {% if step == 'sender' %}aria-current="page"{% endif %}>2. Sender</a>
-  <a href="{{ url_for('main.overview') }}">3. Everything else (checklist)</a></nav>
+  <a href="{{ url_for('main.dashboard') }}">3. Everything else (checklist)</a></nav>
 <section class="card" style="max-width:720px">
 {% if step == 'sender' %}
   <h2>Who are your emails from?</h2>

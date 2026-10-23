@@ -1,4 +1,4 @@
 {% extends "base.html" %}
 {% block title %}Error {{ code }}{% endblock %}
-{% block content %}<div class="card empty"><h1>{{ code }}</h1><p>{{ message }}</p><a class="btn" href="{{ url_for('main.overview') }}">Back to the overview</a></div>{% endblock %}
+{% block content %}<div class="card empty"><h1>{{ code }}</h1><p>{{ message }}</p><a class="btn" href="{{ url_for('main.overview') }}">Back to Sent</a></div>{% endblock %}
 {% block public %}<div class="card"><h1>{{ code }}</h1><p>{{ message }}</p><a class="btn" href="{{ url_for('auth.login') }}">Go to sign in</a></div>{% endblock %}

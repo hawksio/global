@@ -1,0 +1,38 @@
+{% extends "base.html" %}{% from "_ui.html" import csrf, mbadge %}
+{% block title %}{{ c.name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('simple.sent') }}">← Sent</a></p>
+<div class="page-head"><div><h1>{{ c.name }}</h1>
+  <p>{{ SIMPLE_STATUS.get(c.status, c.status) }}{% if c.dry_run or workspace().sandbox_mode %} · <span class="badge sim">practice: nothing really sent</span>{% endif %}
+  · from {{ c.from_name }} &lt;{{ c.from_email }}&gt; · to {{ total }} {{ 'person' if total == 1 else 'people' }}</p></div>
+  <div class="actions">
+    {% if c.status in ('scheduled', 'sending') and can('edit_campaigns') %}<form method="post" action="{{ url_for('simple.sent_action', campaign_id=c.id, action='pause') }}">{{ csrf() }}<button class="btn" type="submit">Pause</button></form>{% endif %}
+    {% if c.status == 'paused' and can('approve_campaigns') %}<form method="post" action="{{ url_for('simple.sent_action', campaign_id=c.id, action='resume') }}">{{ csrf() }}<button class="btn primary" type="submit">Resume</button></form>{% endif %}
+    {% if c.status == 'pending_approval' and can('approve_campaigns') %}<form method="post" action="{{ url_for('simple.sent_action', campaign_id=c.id, action='approve') }}" data-confirm="Approve and send this email now?">{{ csrf() }}<button class="btn primary" type="submit">Approve and send</button></form>{% endif %}
+    {% if c.status not in ('completed', 'cancelled') and can('edit_campaigns') %}<form method="post" action="{{ url_for('simple.sent_action', campaign_id=c.id, action='cancel') }}" data-confirm="Stop sending? Emails already sent can't be taken back.">{{ csrf() }}<button class="btn danger" type="submit">Stop</button></form>{% endif %}
+  </div></div>
+
+{% if c.status in ('scheduled', 'sending') %}
+<div class="card"><p><strong>Sending…</strong> {{ done }} of {{ total }} done. Emails go out gently (about 2 a minute) to protect your reputation; you can leave this page.</p>
+  <div class="progress"><span style="width: {{ (100 * done / total)|int if total else 0 }}%"></span></div></div>
+{% endif %}
+{% if c.pause_reason and c.status == 'paused' %}<div class="notice warn">{{ c.pause_reason }}</div>{% endif %}
+
+<div class="grid cols-2">
+  <section class="card"><h2>Message</h2>
+    {% for s in steps %}<p class="muted"><small>{{ 'Email' if s.step_no == 0 else 'Follow-up after ' ~ s.delay_days ~ ' days (only if no reply)' }}</small></p>
+    <p><strong>{{ s.subject }}</strong></p><pre class="text">{{ s.text_body }}</pre>{% endfor %}
+  </section>
+  <section class="card"><h2>People</h2>
+    <div class="table-wrap"><table><thead><tr><th>Email</th><th>Status</th><th></th></tr></thead><tbody>
+    {% for p in people %}<tr><td>{{ p.email }}{% if p.company %}<br><small class="muted">{{ p.company }}</small>{% endif %}</td>
+      <td>{% if p.replied_at %}<span class="badge ok">Replied</span>{% elif p.last_status %}{{ mbadge(p.last_status) }}{% elif p.status == 'stopped' %}<span class="badge warn">Skipped</span>{% else %}<span class="badge">Waiting</span>{% endif %}
+        {% if p.stop_reason and not p.replied_at %}<br><small class="muted">{{ p.stop_reason }}</small>{% endif %}
+        {% if p.last_error %}<br><small style="color:var(--bad)">{{ p.last_error[:120] }}</small>{% endif %}</td>
+      <td>{% if not p.replied_at and can('edit_campaigns') and steps|length > 1 %}<form method="post" action="{{ url_for('campaigns.mark_replied', campaign_id=c.id, recipient_id=p.id) }}">{{ csrf() }}<button class="btn small" type="submit" title="Stop the follow-up for this person">They replied</button></form>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="3" class="muted">{{ 'Waiting for approval.' if c.status == 'pending_approval' else 'Nobody yet.' }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    <p class="muted mt"><small>“Accepted” = handed to the mail service; “Delivered” = the recipient's mail server took it. Nobody can see whether it landed in the inbox or spam folder.</small></p>
+  </section>
+</div>
+{% endblock %}

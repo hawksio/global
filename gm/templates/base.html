@@ -22,12 +22,19 @@
     </a>
     {% set ep = request.endpoint or '' %}
     {% set sections = navigation() %}
+    {% if can('edit_campaigns') %}<a class="compose-btn{% if ep == 'simple.compose' %} active{% endif %}" href="{{ url_for('simple.compose') }}">✎ Compose</a>{% endif %}
     <ul class="nav">
-      {% for s in sections %}
+      {% for s in sections if s.group == 'main' %}
       <li><a href="{{ url_for(s.url[0], **s.url[1]) }}"{% if s.active %} aria-current="page"{% endif %}><span class="num" aria-hidden="true">{{ s.icon }}</span>{{ s.label }}</a></li>
       {% endfor %}
     </ul>
-    <p class="nav-help muted">Need help? Start on <a href="{{ url_for('main.overview') }}">Home</a>: it shows what to do next.</p>
+    {% set more = sections|selectattr('group', 'equalto', 'more')|list %}
+    {% if more %}<details class="nav-more"{% if more|selectattr('active')|list %} open{% endif %}><summary>More tools</summary>
+    <ul class="nav">
+      {% for s in more %}
+      <li><a href="{{ url_for(s.url[0], **s.url[1]) }}"{% if s.active %} aria-current="page"{% endif %}><span class="num" aria-hidden="true">{{ s.icon }}</span>{{ s.label }}</a></li>
+      {% endfor %}
+    </ul></details>{% endif %}
   </nav>
   <div class="main">
     <header class="topbar">

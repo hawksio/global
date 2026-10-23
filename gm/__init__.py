@@ -81,9 +81,9 @@ def create_app(test_config=None):
     init_db(app)
 
     from . import (admin, ai, analytics, auth, campaigns, contacts, deliverability, discovery, main, public, settings,
-                   suppression, templates_lib, verification, webhooks)
+                   simple, suppression, templates_lib, verification, webhooks)
     for bp in (auth.bp, main.bp, contacts.bp, suppression.bp, verification.bp, discovery.bp, ai.bp, templates_lib.bp,
-               campaigns.bp, deliverability.bp, analytics.bp, settings.bp, admin.bp, webhooks.bp, public.bp):
+               campaigns.bp, deliverability.bp, analytics.bp, settings.bp, admin.bp, webhooks.bp, public.bp, simple.bp):
         app.register_blueprint(bp)
 
     from .security import can, check_csrf, csrf_token, current_user, workspace

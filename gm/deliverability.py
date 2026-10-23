@@ -212,3 +212,17 @@ def simulate_events():
     flash(f"Generated simulated events for {len(rows)} simulated messages. They are labelled 'simulated' everywhere and "
           "excluded from real sender-health figures.", "info")
     return redirect(request.referrer or url_for("analytics.index"))
+
+
+def ensure_recent_check(ws, domain, max_age_hours=24):
+    """Run the DNS checks for a sending domain if there's no check from the last day. Returns the latest check."""
+    from .db import parse_ts
+    from datetime import datetime, timezone
+    check = latest_check(ws["id"], domain)
+    fresh = check and (datetime.now(timezone.utc) - parse_ts(check["checked_at"])).total_seconds() < max_age_hours * 3600
+    if domain and not fresh:
+        results = run_checks(ws, domain)
+        execute("INSERT INTO dns_checks (workspace_id, domain, results, score, checked_at) VALUES (?, ?, ?, ?, ?)",
+                (ws["id"], domain, json.dumps(results), score(results), now()))
+        check = latest_check(ws["id"], domain)
+    return check
