@@ -54,11 +54,29 @@ class Compose(AppCase):
         payload, key = self.provider.sent[0]
         self.assertEqual(payload["from"], "Olive <hello@sender.test>")
         self.assertIn("Hi Ann,", payload["text"])
-        self.assertNotIn("<table", payload["html"], "plain style: no newsletter layout")
-        self.assertNotIn("<img", payload["html"])
-        self.assertIn("Unsubscribe", payload["html"])
+        # Personal email, like one typed in Gmail: text only, no HTML, links or bulk-mail headers.
+        self.assertNotIn("html", payload)
+        self.assertNotIn("headers", payload)
+        self.assertNotIn("http", payload["text"])
+        # Still identifies the sender and offers an opt-out (by reply).
         self.assertIn("1 Test Street", payload["text"])
-        self.assertEqual(payload["headers"]["List-Unsubscribe-Post"], "List-Unsubscribe=One-Click")
+        self.assertIn("just reply and say so", payload["text"].lower())
+
+    def test_asked_to_stop_and_promotions_hints(self):
+        from gm.db import query
+        live(self)
+        self.contact("ann@good.test")
+        self.send()
+        cid = query("SELECT id FROM campaigns", one=True)["id"]
+        rid = query("SELECT id FROM campaign_recipients", one=True)["id"]
+        self.assertIn("Asked to stop", self.client.get(f"/sent/{cid}").get_data(as_text=True))
+        self.post(f"/sent/{cid}/people/{rid}/stop")
+        self.assertEqual(query("SELECT reason FROM suppressions", one=True)["reason"], "unsubscribe")
+        self.assertEqual(query("SELECT status FROM contacts", one=True)["status"], "unsubscribed")
+        page = self.post("/compose", {"to_mode": "all", "subject": "BIG SALE!!", "body": "Get 20% off, buy now",
+                                      "from_name": "Olive", "action": "test"}).get_data(as_text=True)
+        self.assertIn("Inbox check for this email", page)
+        self.assertIn("Salesy words", page)
 
     def test_problems_are_explained_and_nothing_is_created(self):
         from gm.db import execute, scalar

@@ -13,6 +13,7 @@
   {% if draft %}<input type="hidden" name="draft_id" value="{{ draft.id }}">{% endif %}
   <div class="compose-head">{{ 'Draft' if draft else 'New email' }}{% if ws.sandbox_mode %} <span class="badge sim">Practice mode: nothing is really sent</span>{% endif %}</div>
 
+  {% if hints %}<div class="notice info"><strong>Inbox check for this email:</strong><ul style="margin:6px 0 0">{% for h in hints %}<li>{{ h }}</li>{% endfor %}</ul></div>{% endif %}
   {% if problems %}<div class="notice bad" role="alert"><strong>Before sending:</strong><ul style="margin:6px 0 0">{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
 
   {% if not ws.company_address or not ws.sender_email %}
@@ -72,7 +73,11 @@
     <li>Keep links to one or two, and no attachments or big images in first emails.</li>
     <li>Email people who will recognise why you're writing. Fewer, better-matched people beats a big list.</li>
     <li>Start small with a new domain (20–50 a day) and grow over a few weeks.</li>
-    <li>Your domain's SPF, DKIM and DMARC are checked automatically; every email has an unsubscribe link and no tracking.</li>
+    <li>Your domain's SPF, DKIM and DMARC are checked automatically. Emails go out as plain text with no tracking, and each
+      one says people can reply to opt out. If someone does, click “Asked to stop” next to their name in Sent.</li>
+    <li>Gmail's Promotions tab isn't spam: it's where Gmail puts mail that looks like marketing. Plain, short, personal
+      emails without offers or prices are the most likely to reach Primary. When people reply, or move your email to
+      Primary, Gmail learns.</li>
     <li>No sending tool can guarantee the inbox. Replies and low spam reports are what build your reputation.</li>
   </ul>
 </details>

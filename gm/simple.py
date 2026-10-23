@@ -54,6 +54,35 @@ def _parse_addresses(raw):
     return found, bad
 
 
+PROMO_WORDS = ["free", "offer", "discount", "% off", "sale", "deal", "limited time", "buy now", "order now", "promo",
+               "coupon", "special price", "best price", "save ", "act now", "click here", "subscribe", "newsletter",
+               "unsubscribe", "winner", "bonus", "cheap"]
+
+
+def promotions_hints(subject, body):
+    """Plain-language reasons an email may be sorted into Gmail's Promotions tab (none means it reads like a
+    personal email). Gmail decides on its own; these only reduce the chance."""
+    import re
+    text = f"{subject}\n{body}".lower()
+    hints = []
+    words = [w for w in PROMO_WORDS if w in text]
+    if words:
+        hints.append("Salesy words like " + ", ".join(f"“{w.strip()}”" for w in words[:4]) +
+                     " make Gmail think it's a promotion. Say it the way you would to a colleague.")
+    links = len(re.findall(r"https?://|www\.", text))
+    if links > 1:
+        hints.append(f"{links} links: keep it to one (or none) in a first email.")
+    if re.search(r"[$€£₦]\s?\d|\d+\s?%", text):
+        hints.append("Prices or percentages read like an advert; save them for when they reply.")
+    if subject.isupper() or re.search(r"\b[A-Z]{4,}\b", subject) or "!" in subject:
+        hints.append("Keep the subject calm: no capitals or exclamation marks.")
+    if len(body.split()) > 180:
+        hints.append("It's long for a first email; 50–120 words reads more personal.")
+    if "{{first_name" not in body:
+        hints.append("Greet people by name: use “Insert first name”.")
+    return hints
+
+
 def _friendly_problems(items, report):
     """Turn checklist items that block sending into plain instructions."""
     out = []
@@ -116,14 +145,14 @@ def compose():
                 "follow_days": "3", "follow_body": FOLLOW_UP_TEXT, "when": "", "permission": False,
                 "company_address": "", "sender_email": ""}
 
-    def page(problems=(), code=200):
+    def page(problems=(), code=200, hints=None):
         current = workspace()
         tags = [dict(name=t["name"], n=_ready_count(wid, t["name"]))
                 for t in query("SELECT name FROM tags WHERE workspace_id = ? AND name NOT LIKE 'compose-%' ORDER BY name", (wid,))]
         no_permission = scalar("SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND sandbox = 0 AND status = 'active' "
                                "AND lawful_basis = 'unknown'", (wid,))
         return render_template("simple/compose.html", form=form, tags=tags, problems=list(problems), ws=current,
-                               ready_all=_ready_count(wid), draft=draft, no_permission=no_permission), code
+                               ready_all=_ready_count(wid), draft=draft, no_permission=no_permission, hints=hints), code
 
     if request.method != "POST":
         return page()
@@ -180,7 +209,7 @@ def compose():
             flash("Practice mode is on, so the test was saved, not sent. Turn it off in Settings → Connections.", "info")
         else:
             flash(f"Test sent to {user['email']}. Check your inbox (and the spam folder).", "success")
-        return page()
+        return page(hints=promotions_hints(subject, body) or ["Reads like a personal email. Nothing to change."])
 
     if form["to_mode"] == "paste":
         addresses, invalid = _parse_addresses(form["pasted"])
@@ -349,6 +378,22 @@ def sent_detail(campaign_id):
     done = sum(1 for p in people if p["status"] != "active" or (p["last_status"] and p["next_step"] > 0))
     return render_template("simple/sent_detail.html", c=c, steps=steps_of(c["id"]), people=people, total=total, done=done,
                            SIMPLE_STATUS=SIMPLE_STATUS)
+
+
+@bp.route("/sent/<int:campaign_id>/people/<int:recipient_id>/stop", methods=["POST"])
+@require("edit_campaigns")
+def person_stop(campaign_id, recipient_id):
+    """They replied asking not to be emailed again (the opt-out offered in every personal email)."""
+    from .suppression import add_suppression
+    c = _campaign(campaign_id)
+    r = query("SELECT r.*, ct.email_normalized FROM campaign_recipients r JOIN contacts ct ON ct.id = r.contact_id "
+              "WHERE r.id = ? AND r.campaign_id = ?", (recipient_id, c["id"]), one=True)
+    if not r:
+        abort(404)
+    add_suppression(c["workspace_id"], r["email_normalized"], "unsubscribe", "Replied asking to stop")
+    audit("contact.opted_out_by_reply", target=r["email_normalized"])
+    flash(f"{r['email']} won't be emailed again.", "success")
+    return redirect(url_for("simple.sent_detail", campaign_id=c["id"]))
 
 
 @bp.route("/sent/<int:campaign_id>/<action>", methods=["POST"])

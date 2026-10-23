@@ -369,7 +369,7 @@ def dry_run(campaign_id):
     for contact in rep["eligible"][:3]:
         subj, html_out, text_out, _ = render.build_marketing(ws, contact, step0["subject"], step0["html_body"],
                                                              step0["text_body"], step0["preheader"])
-        samples.append({"to": contact["email"], "subject": subj, "html": html_out})
+        samples.append({"to": contact["email"], "subject": subj, "html": html_out or render.text_preview_html(text_out)})
     n = len(rep["eligible"])
     hours_per_day = c["send_window_end"] - c["send_window_start"]
     per_hour = min(ws["hourly_send_limit"], c["rate_per_minute"] * 60)
@@ -698,9 +698,13 @@ def _payload(c, ws, contact, step, message_id):
                                                                step["text_body"], step["preheader"], message_id=message_id,
                                                                style=c["style"])
     payload = {"from": f"{c['from_name'] or ws['sender_name'] or ws['name']} <{c['from_email']}>", "to": [contact["email"]],
-               "subject": subj, "html": html_out, "text": text_out, "headers": headers,
+               "subject": subj, "text": text_out,
                "tags": [{"name": "category", "value": "marketing"}, {"name": "campaign", "value": str(c["id"])},
                         {"name": "step", "value": str(step["step_no"])}]}
+    if html_out is not None:  # personal (plain) emails are text only
+        payload["html"] = html_out
+    if headers:
+        payload["headers"] = headers
     if c["reply_to"]:
         payload["reply_to"] = c["reply_to"]
     return payload

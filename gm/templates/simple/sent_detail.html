@@ -29,7 +29,8 @@
       <td>{% if p.replied_at %}<span class="badge ok">Replied</span>{% elif p.last_status %}{{ mbadge(p.last_status) }}{% elif p.status == 'stopped' %}<span class="badge warn">Skipped</span>{% else %}<span class="badge">Waiting</span>{% endif %}
         {% if p.stop_reason and not p.replied_at %}<br><small class="muted">{{ p.stop_reason }}</small>{% endif %}
         {% if p.last_error %}<br><small style="color:var(--bad)">{{ p.last_error[:120] }}</small>{% endif %}</td>
-      <td>{% if not p.replied_at and can('edit_campaigns') and steps|length > 1 %}<form method="post" action="{{ url_for('campaigns.mark_replied', campaign_id=c.id, recipient_id=p.id) }}">{{ csrf() }}<button class="btn small" type="submit" title="Stop the follow-up for this person">They replied</button></form>{% endif %}</td></tr>
+      <td>{% if can('edit_campaigns') and p.stop_reason != 'Unsubscribed' %}<form method="post" action="{{ url_for('simple.person_stop', campaign_id=c.id, recipient_id=p.id) }}" data-confirm="Add {{ p.email }} to your do-not-email list?">{{ csrf() }}<button class="btn small" type="submit" title="They replied asking not to be emailed">Asked to stop</button></form>{% endif %}
+        {% if not p.replied_at and can('edit_campaigns') and steps|length > 1 %}<form method="post" action="{{ url_for('campaigns.mark_replied', campaign_id=c.id, recipient_id=p.id) }}">{{ csrf() }}<button class="btn small" type="submit" title="Stop the follow-up for this person">They replied</button></form>{% endif %}</td></tr>
     {% else %}<tr><td colspan="3" class="muted">{{ 'Waiting for approval.' if c.status == 'pending_approval' else 'Nobody yet.' }}</td></tr>{% endfor %}
     </tbody></table></div>
     <p class="muted mt"><small>“Accepted” = handed to the mail service; “Delivered” = the recipient's mail server took it. Nobody can see whether it landed in the inbox or spam folder.</small></p>

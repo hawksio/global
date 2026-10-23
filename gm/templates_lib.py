@@ -226,7 +226,11 @@ def send_test(ws, to_email, subject, html_body, text_body, preheader="", contact
     mid, _ = mailer.record_message(category="test", kind=kind, to_email=to_email, subject=subj, idempotency_key=key,
                                    workspace_id=ws["id"])
     payload = {"from": f"{ws['sender_name'] or ws['name']} <{ws['sender_email']}>", "to": [to_email], "subject": subj,
-               "html": html_out, "text": text_out, "headers": headers, "tags": [{"name": "category", "value": "test"}]}
+               "text": text_out, "tags": [{"name": "category", "value": "test"}]}
+    if html_out is not None:
+        payload["html"] = html_out
+    if headers:
+        payload["headers"] = headers
     if ws["reply_to"]:
         payload["reply_to"] = ws["reply_to"]
     provider = mailer.workspace_provider(ws)

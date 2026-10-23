@@ -125,45 +125,41 @@ def wrap_html(body, preheader="", brand="#2563eb"):
             "sans-serif;color:#111827\">" + body + "</td></tr></table></td></tr></table></body></html>")
 
 
-def plain_footer_html(ws, unsub):
-    who = html.escape(ws["company_name"] or ws["name"])
-    addr = (" · " + html.escape(ws["company_address"]).replace("\n", ", ")) if ws["company_address"] else ""
-    return (f"<p style=\"margin-top:24px;font-size:12px;color:#888\">{who}{addr}<br>"
-            f"Prefer not to hear from me? <a href=\"{html.escape(unsub)}\" style=\"color:#888\">Unsubscribe</a>.</p>")
+OPT_OUT_LINE = "Not interested? Just reply and say so, and I won't email you again."
 
 
-def plain_footer_text(ws, unsub):
-    lines = ["", "", ws["company_name"] or ws["name"]]
-    if ws["company_address"]:
-        lines.append(ws["company_address"].replace("\n", ", "))
-    lines.append(f"Prefer not to hear from me? Unsubscribe: {unsub}")
-    return "\n".join(lines)
+def personal_signature(ws):
+    """The small print under a personal email: who you are, where you are, and how to opt out (by reply)."""
+    who = ws["company_name"] or ws["name"]
+    address = ws["company_address"].strip().replace("\n", ", ") if ws["company_address"] else ""
+    return "\n".join(["", "", who + (f", {address}" if address else ""), OPT_OUT_LINE])
 
 
-def wrap_plain(body):
-    """Looks like an email typed in Gmail: no banner, no colours, no images, no tracking."""
-    return ("<!doctype html><html><head><meta charset=\"utf-8\"></head><body>"
-            "<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222\">"
-            + body + "</div></body></html>")
+def text_preview_html(text):
+    """How a plain-text email looks in an inbox, for previews inside the app."""
+    return ("<!doctype html><html><head><meta charset=\"utf-8\"></head><body style=\"margin:0\">"
+            "<pre style=\"white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;"
+            "color:#222;margin:16px\">" + html.escape(text) + "</pre></body></html>")
 
 
 def build_marketing(ws, contact, subject, html_body, text_body, preheader="", message_id=None, test=False, style="branded"):
     """Returns (subject, html, text, headers) personalised for one contact.
 
-    style 'plain' produces a simple personal-looking email (best for one-to-one outreach and inbox placement);
-    'branded' wraps the body in the designed newsletter layout."""
+    style 'plain' (Compose) is a personal email: plain text only, no HTML, links, images, tracking or list headers,
+    signed with the company name and address and an opt-out by reply. That is how one-to-one business email looks
+    when typed in Gmail, which gives it the best chance of the Primary inbox. html is None for this style.
+    'branded' wraps the body in the designed newsletter layout with an unsubscribe link and one-click headers."""
     if style == "plain":
         c = dict(contact) if contact else {}
-        email_norm = (c.get("email_normalized") or c.get("email") or "test@example.com").lower()
-        unsub = unsubscribe_url(ws["id"], email_norm, message_id)
-        ctx = context_for(c, ws, unsub)
+        ctx = context_for(c, ws, "")
         subj = fill(subject, ctx, escape=False).replace("\r", " ").replace("\n", " ").strip()
-        body_html = fill(strip_scripts(html_body), ctx, escape=True)
-        body_text = fill(text_body, ctx, escape=False) if text_body and text_body.strip() else html_to_text(body_html)
+        if text_body and text_body.strip():
+            body_text = fill(text_body, ctx, escape=False)
+        else:
+            body_text = html_to_text(fill(strip_scripts(html_body), ctx, escape=False))
         if test:
             subj = "[TEST] " + subj
-        headers = {"List-Unsubscribe": f"<{unsub}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
-        return subj, wrap_plain(body_html + plain_footer_html(ws, unsub)), body_text + plain_footer_text(ws, unsub), headers
+        return subj, None, body_text.rstrip() + personal_signature(ws), {}
     return _build_branded(ws, contact, subject, html_body, text_body, preheader, message_id, test)
 
 
