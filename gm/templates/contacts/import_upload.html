@@ -11,9 +11,11 @@
   <div class="notice info mt"><p>Importing doesn't make anyone eligible for marketing. Each contact keeps its source, purpose and permission to email, and campaigns only include contacts that qualify.</p></div>
 </section>
 <section class="card"><h2>Recent imports</h2>
-  <div class="table-wrap"><table><thead><tr><th>File</th><th>Status</th><th class="num">Rows</th><th class="num">Accepted</th><th class="num">Review</th><th class="num">Duplicates</th><th class="num">Invalid</th><th class="num">Suppressed</th><th class="num">Rejected</th><th>Uploaded</th></tr></thead><tbody>
-  {% for i in imports %}<tr><td><a href="{{ url_for('contacts.import_status', import_id=i.id) }}">{{ i.filename }}</a></td><td>{{ jbadge(i.status) }}</td><td class="num">{{ i.total_rows }}</td><td class="num">{{ i.accepted }}</td><td class="num">{{ i.review }}</td><td class="num">{{ i.duplicates }}</td><td class="num">{{ i.invalid }}</td><td class="num">{{ i.suppressed }}</td><td class="num">{{ i.rejected }}</td><td><small>{{ i.created_at|dt }}</small></td></tr>
-  {% else %}<tr><td colspan="10" class="muted">No imports yet.</td></tr>{% endfor %}
+  <div class="table-wrap"><table><thead><tr><th>File</th><th>Status</th><th class="num">Rows</th><th class="num">Accepted</th><th class="num">Review</th><th class="num">Duplicates</th><th class="num">Invalid</th><th class="num">Suppressed</th><th class="num">Rejected</th><th>Uploaded</th><th></th></tr></thead><tbody>
+  {% for i in imports %}<tr><td><a href="{{ url_for('contacts.import_status', import_id=i.id) }}">{{ i.filename }}</a></td><td>{{ jbadge(i.status) }}</td><td class="num">{{ i.total_rows }}</td><td class="num">{{ i.accepted }}</td><td class="num">{{ i.review }}</td><td class="num">{{ i.duplicates }}</td><td class="num">{{ i.invalid }}</td><td class="num">{{ i.suppressed }}</td><td class="num">{{ i.rejected }}</td><td><small>{{ i.created_at|dt }}</small></td>
+  <td>{% if i.status == 'completed' and can('delete_contacts') %}<a class="btn small" href="{{ url_for('contacts.index', import_id=i.id) }}">View</a>
+    <form method="post" action="{{ url_for('contacts.delete_import_contacts', import_id=i.id) }}" class="inline" data-confirm="Delete the contacts imported from {{ i.filename }}?">{{ csrf() }}<button class="btn small danger" type="submit">Delete</button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="11" class="muted">No imports yet.</td></tr>{% endfor %}
   </tbody></table></div>
 </section>
 {% endblock %}

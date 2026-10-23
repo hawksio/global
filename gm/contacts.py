@@ -143,6 +143,9 @@ def filter_sql(workspace_id, f):
         where.append("EXISTS (SELECT 1 FROM contact_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.contact_id = c.id "
                      "AND t.name = ?)")
         args.append(f["tag"])
+    if str(f.get("import_id", "")).isdigit():
+        where.append("c.import_id = ?")
+        args.append(int(f["import_id"]))
     if f.get("exclude_role"):
         where.append("c.is_role = 0")
     if f.get("exclude_sandbox"):
@@ -152,7 +155,7 @@ def filter_sql(workspace_id, f):
 
 def _filters_from_request():
     keys = ("q", "company", "domain", "country", "source", "industry", "tag", "verification_status", "status",
-            "recipient_type", "lawful_basis")
+            "recipient_type", "lawful_basis", "import_id")
     return {k: request.args.get(k, "").strip() for k in keys if request.args.get(k, "").strip()}
 
 
@@ -181,7 +184,13 @@ def index():
     total = scalar(f"SELECT COUNT(*) FROM contacts c WHERE {where}", args)
     rows = query(f"SELECT c.* FROM contacts c WHERE {where} ORDER BY {order} {direction}, c.id DESC LIMIT ? OFFSET ?",
                  (*args, PAGE_SIZE, (page - 1) * PAGE_SIZE))
+    groups = query("SELECT t.name, COUNT(ct.contact_id) AS n FROM tags t LEFT JOIN contact_tags ct ON ct.tag_id = t.id "
+                   "WHERE t.workspace_id = ? AND t.name NOT LIKE 'compose-%' GROUP BY t.id HAVING n > 0 ORDER BY t.name", (wid,))
+    files = query("SELECT i.id, i.filename, i.created_at, COUNT(c.id) AS n FROM imports i JOIN contacts c ON c.import_id = i.id "
+                  "WHERE i.workspace_id = ? GROUP BY i.id ORDER BY i.id DESC LIMIT 20", (wid,))
+    everyone = scalar("SELECT COUNT(*) FROM contacts WHERE workspace_id = ?", (wid,))
     return render_template("contacts/list.html", contacts=rows, total=total, page=page, pages=max(1, -(-total // PAGE_SIZE)),
+                           groups=groups, files=files, everyone=everyone,
                            filters=f, sort=sort, dir=direction.lower(), tags=tags_for([r["id"] for r in rows]),
                            all_tags=query("SELECT name FROM tags WHERE workspace_id = ? ORDER BY name", (wid,)),
                            any_contacts=scalar("SELECT 1 FROM contacts WHERE workspace_id = ? LIMIT 1", (wid,)))
@@ -316,21 +325,32 @@ def bulk():
     if not ids:
         flash("Select at least one contact first.", "error")
         return redirect(request.referrer or url_for("contacts.index"))
-    marks = ",".join("?" * len(ids))
-    owned = [r["id"] for r in query(f"SELECT id FROM contacts WHERE workspace_id = ? AND id IN ({marks})", (wid, *ids))]
+    owned = []
+    for i in range(0, len(ids), 500):
+        chunk = ids[i:i + 500]
+        owned += [r["id"] for r in query(f"SELECT id FROM contacts WHERE workspace_id = ? AND id IN ({','.join('?' * len(chunk))})",
+                                         (wid, *chunk))]
     if not owned:
         abort(404)
-    marks = ",".join("?" * len(owned))
+    def rows(sql_prefix, extra=()):
+        """Run an id-list query in chunks of 500 (older SQLite builds allow only 999 parameters)."""
+        out = []
+        for i in range(0, len(owned), 500):
+            chunk = owned[i:i + 500]
+            out += query(f"{sql_prefix} ({','.join('?' * len(chunk))})", (*extra, *chunk))
+        return out
+
     if action == "export":
         if not can("export_contacts"):
             abort(403)
-        return export_rows(query(f"SELECT * FROM contacts WHERE id IN ({marks}) ORDER BY id", owned), "selected-contacts.csv")
+        return export_rows(rows("SELECT * FROM contacts WHERE id IN"), "selected-contacts.csv")
     if action == "delete":
         if not can("delete_contacts"):
             abort(403)
-        execute(f"DELETE FROM contacts WHERE workspace_id = ? AND id IN ({marks})", (wid, *owned))
+        _delete_ids(wid, owned)
         audit("contact.bulk_deleted", detail=f"{len(owned)} contacts")
         flash(f"Deleted {len(owned)} contacts.", "success")
+        return redirect(url_for("contacts.index"))
     elif action in ("tag", "untag"):
         names = [n for n in request.form.get("tag", "").split(",") if n.strip()]
         if not names:
@@ -345,8 +365,10 @@ def bulk():
                     execute("DELETE FROM contact_tags WHERE contact_id = ? AND tag_id = ?", (cid, tid))
         flash(f"Updated tags on {len(owned)} contacts.", "success")
     elif action in ("set_business", "set_consumer"):
-        execute(f"UPDATE contacts SET recipient_type = ?, updated_at = ? WHERE id IN ({marks})",
-                ("business" if action == "set_business" else "consumer", now(), *owned))
+        for i in range(0, len(owned), 500):
+            chunk = owned[i:i + 500]
+            execute(f"UPDATE contacts SET recipient_type = ?, updated_at = ? WHERE id IN ({','.join('?' * len(chunk))})",
+                    ("business" if action == "set_business" else "consumer", now(), *chunk))
         flash(f"Updated {len(owned)} contacts.", "success")
     elif action == "verify":
         if not can("verify"):
@@ -356,12 +378,71 @@ def bulk():
         return redirect(url_for("verification.job", job_id=job))
     elif action == "suppress":
         from .suppression import add_suppression
-        for r in query(f"SELECT email_normalized FROM contacts WHERE id IN ({marks})", owned):
+        for r in rows("SELECT email_normalized FROM contacts WHERE id IN"):
             add_suppression(wid, r["email_normalized"], "manual", f"Bulk action by {current_user()['full_name']}")
         flash(f"Suppressed {len(owned)} addresses.", "success")
     else:
         abort(400)
     return redirect(request.referrer or url_for("contacts.index"))
+
+
+def _delete_ids(wid, ids):
+    """Delete contacts in chunks. Do-not-email entries are kept so those addresses stay protected."""
+    for i in range(0, len(ids), 500):
+        chunk = ids[i:i + 500]
+        execute(f"DELETE FROM contacts WHERE workspace_id = ? AND id IN ({','.join('?' * len(chunk))})", (wid, *chunk))
+    execute("DELETE FROM tags WHERE workspace_id = ? AND id NOT IN (SELECT tag_id FROM contact_tags)", (wid,))
+    return len(ids)
+
+
+@bp.route("/groups/delete", methods=["POST"])
+@require("delete_contacts")
+def delete_group():
+    """Delete every contact in a group (tag), or just remove the group label (keep=1)."""
+    wid = ws_id()
+    tag = request.form.get("tag", "")
+    t = query("SELECT * FROM tags WHERE workspace_id = ? AND name = ?", (wid, tag), one=True)
+    if not t:
+        abort(404)
+    if request.form.get("keep") == "1":
+        execute("DELETE FROM tags WHERE id = ?", (t["id"],))
+        audit("contacts.group_removed", target=tag)
+        flash(f"Group “{tag}” removed. The contacts are still in your list.", "success")
+    else:
+        ids = [r["contact_id"] for r in query("SELECT contact_id FROM contact_tags WHERE tag_id = ?", (t["id"],))]
+        _delete_ids(wid, ids)
+        execute("DELETE FROM tags WHERE id = ?", (t["id"],))
+        audit("contacts.group_deleted", target=tag, detail=f"{len(ids)} contacts")
+        flash(f"Deleted the {len(ids)} contacts in “{tag}”.", "success")
+    return redirect(url_for("contacts.index"))
+
+
+@bp.route("/import/<int:import_id>/delete-contacts", methods=["POST"])
+@require("delete_contacts")
+def delete_import_contacts(import_id):
+    """Undo an import: delete every contact that came from this file."""
+    imp = _get_import(import_id)
+    ids = [r["id"] for r in query("SELECT id FROM contacts WHERE workspace_id = ? AND import_id = ?",
+                                  (imp["workspace_id"], import_id))]
+    _delete_ids(imp["workspace_id"], ids)
+    audit("import.contacts_deleted", target=imp["filename"], detail=f"{len(ids)} contacts")
+    flash(f"Deleted the {len(ids)} contacts imported from {imp['filename']}.", "success")
+    return redirect(request.referrer or url_for("contacts.index"))
+
+
+@bp.route("/delete-all", methods=["POST"])
+@require("delete_contacts")
+def delete_all():
+    """Delete every contact in the workspace. Typing DELETE is required. Do-not-email entries are kept."""
+    wid = ws_id()
+    if request.form.get("confirm_text", "").strip().upper() != "DELETE":
+        flash("Type DELETE in the box to confirm deleting all contacts.", "error")
+        return redirect(url_for("contacts.index"))
+    ids = [r["id"] for r in query("SELECT id FROM contacts WHERE workspace_id = ?", (wid,))]
+    _delete_ids(wid, ids)
+    audit("contacts.all_deleted", detail=f"{len(ids)} contacts")
+    flash(f"All {len(ids)} contacts deleted. Your do-not-email list was kept so those people stay protected.", "success")
+    return redirect(url_for("contacts.index"))
 
 
 EXPORT_COLUMNS = ["email", "first_name", "last_name", "company", "job_title", "domain", "website", "phone", "country",

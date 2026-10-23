@@ -9,6 +9,7 @@
     {% if c.status in ('scheduled', 'sending') and can('edit_campaigns') %}<form method="post" action="{{ url_for('simple.sent_action', campaign_id=c.id, action='pause') }}">{{ csrf() }}<button class="btn" type="submit">Pause</button></form>{% endif %}
     {% if c.status == 'paused' and can('approve_campaigns') %}<form method="post" action="{{ url_for('simple.sent_action', campaign_id=c.id, action='resume') }}">{{ csrf() }}<button class="btn primary" type="submit">Resume</button></form>{% endif %}
     {% if c.status == 'pending_approval' and can('approve_campaigns') %}<form method="post" action="{{ url_for('simple.sent_action', campaign_id=c.id, action='approve') }}" data-confirm="Approve and send this email now?">{{ csrf() }}<button class="btn primary" type="submit">Approve and send</button></form>{% endif %}
+    {% if can('edit_campaigns') %}<form method="post" action="{{ url_for('simple.sent_action', campaign_id=c.id, action='delete') }}" data-confirm="Delete this email from Sent? Anything still sending is stopped first.">{{ csrf() }}<button class="btn" type="submit">Delete</button></form>{% endif %}
     {% if c.status not in ('completed', 'cancelled') and can('edit_campaigns') %}<form method="post" action="{{ url_for('simple.sent_action', campaign_id=c.id, action='cancel') }}" data-confirm="Stop sending? Emails already sent can't be taken back.">{{ csrf() }}<button class="btn danger" type="submit">Stop</button></form>{% endif %}
   </div></div>
 

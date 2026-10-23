@@ -16,6 +16,21 @@
   <button class="btn primary" type="submit">Save</button>
 </form>
 <div style="max-width:760px">
+<details class="more card"><summary>📷 Show your picture next to your emails</summary>
+  <p>Inboxes don't take a picture from the email itself; they show the photo linked to <strong>your sending address</strong>.
+    (Putting a photo inside the email doesn't do it, and it pushes emails towards Promotions.)</p>
+  <h3>Gmail (free, about 5 minutes)</h3>
+  <ol>
+    <li>Open <a href="https://accounts.google.com/signup" target="_blank" rel="noopener">accounts.google.com/signup</a>, enter your name, and on the email step choose <strong>“Use your existing email”</strong>.</li>
+    <li>Enter <strong>{{ ws.sender_email or 'your sending email' }}</strong> and confirm the code Google sends to that inbox.</li>
+    <li>Go to <a href="https://myaccount.google.com/personal-info" target="_blank" rel="noopener">myaccount.google.com → Personal info → Profile picture</a> and upload your photo or logo.</li>
+  </ol>
+  <p class="muted">Gmail users then see your photo next to emails from that address (it can take a day to appear). This doesn't change where your email is hosted; it only creates a Google sign-in for the address.</p>
+  <h3>Outlook / Hotmail</h3>
+  <p>Do the same at <a href="https://signup.live.com" target="_blank" rel="noopener">signup.live.com</a> (“use your email address”) and add a photo to that Microsoft account.</p>
+  <h3>Company logo for everyone (advanced, paid)</h3>
+  <p class="muted">A standard called BIMI shows your logo in Gmail, Yahoo and Apple Mail. You already have the required DMARC “quarantine” policy; Gmail also needs a logo certificate (VMC/CMC) that costs roughly US$1,000+ a year.</p>
+</details>
 <details class="more card"><summary>Branding and more (logo, colour, time zone, footer text)</summary>
 <form method="post">{{ csrf() }}<input type="hidden" name="section" value="company">
   <input type="hidden" name="company_name" value="{{ ws.company_name }}"><input type="hidden" name="company_address" value="{{ ws.company_address }}">

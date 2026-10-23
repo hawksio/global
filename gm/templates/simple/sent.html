@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% from "_ui.html" import csrf %}
 {% block title %}Sent{% endblock %}
 {% block content %}
 <div class="page-head"><div><h1>Sent</h1></div>
@@ -8,39 +8,43 @@
 {% if ws.sandbox_mode %}<div class="notice sim">Practice mode is on: nothing is really sent. Turn it off in Settings → Connections when you're ready.</div>{% endif %}
 {% if next_step and can('manage_settings') %}<div class="notice info">Setup: <a href="{{ next_step.url }}">{{ next_step.label }}</a> · <small>{{ next_step.help }}</small></div>{% endif %}
 
-{% if my_drafts %}
-<h2 class="mt">Drafts</h2>
-<div class="mail-list" style="margin-bottom:18px">
-  {% for d in my_drafts %}
-  <a class="mail-row" href="{{ url_for('simple.compose', draft=d.id) }}">
-    <span class="mail-to" style="color:var(--bad)">Draft</span>
-    <span class="mail-subject"><strong>{{ d.name }}</strong> <span class="muted">– {{ (d.preview or '')[:110].replace('
-', ' ') }}</span></span>
-    <span class="mail-stats"><span class="btn small">Continue</span></span>
-    <span class="mail-date muted">{{ d.updated_at[5:16] }}</span>
-  </a>
-  {% endfor %}
-</div>
-{% if rows %}<h2>Sent</h2>{% endif %}
-{% endif %}
+<nav class="tabs" aria-label="Folders">{% for k, v in FOLDERS.items() %}<a href="{{ url_for('simple.sent', folder=k) }}"{% if folder == k %} aria-current="page"{% endif %}>{{ v }} <small class="muted">{{ counts[k] }}</small></a>{% endfor %}</nav>
+<form method="get" class="toolbar" role="search"><input type="hidden" name="folder" value="{{ folder }}">
+  <div class="field" style="flex:1;max-width:420px"><label class="sr-only" for="sq">Search emails</label><input id="sq" type="search" name="q" value="{{ q }}" placeholder="Search subject, message or recipient"></div>
+  <button class="btn" type="submit">Search</button>{% if q %}<a class="btn" href="{{ url_for('simple.sent', folder=folder) }}">Clear</a>{% endif %}</form>
+
 {% if rows %}
-<div class="mail-list">
-  {% for r in rows %}
-  <a class="mail-row" href="{{ url_for('simple.sent_detail', campaign_id=r.id) }}">
-    <span class="mail-to">To: {{ r.people }} {{ 'person' if r.people == 1 else 'people' }}</span>
-    <span class="mail-subject"><strong>{{ r.name }}</strong> <span class="muted">– {{ (r.preview or '')[:110].replace('\n', ' ') }}</span></span>
-    <span class="mail-stats">
-      <span class="badge {{ {'completed': 'ok', 'sending': 'info', 'paused': 'warn', 'cancelled': 'bad', 'pending_approval': 'warn', 'scheduled': 'info'}.get(r.status, '') }}">{{ SIMPLE_STATUS.get(r.status, r.status) }}</span>
-      {% if r.dry_run %}<span class="badge sim">practice</span>{% endif %}
-      <small class="muted">{{ r.sent }} sent{% if r.delivered %} · {{ r.delivered }} delivered{% endif %}{% if r.replied %} · {{ r.replied }} replied{% endif %}{% if r.problems %} · <span style="color:var(--bad)">{{ r.problems }} failed</span>{% endif %}</small>
-    </span>
-    <span class="mail-date muted">{{ (r.launched_at or r.updated_at)[5:16] }}</span>
-  </a>
-  {% endfor %}
-</div>
+<form method="post" action="{{ url_for('simple.sent_delete') }}">{{ csrf() }}<input type="hidden" name="folder" value="{{ folder }}">
+  <div class="bulkbar" id="sent-bulk"><strong><span data-count>0</span> selected</strong>
+    {% if can('edit_campaigns') %}<button class="btn small danger" type="submit" data-confirm="Delete the selected emails? Anything still sending is stopped first.">Delete</button>{% endif %}</div>
+  <div class="mail-list" data-bulk="sent-bulk">
+    <div class="mail-head"><label class="check" style="margin:0"><input type="checkbox" data-select-all aria-label="Select all"> <span class="muted"><small>Select all</small></span></label></div>
+    {% for r in rows %}
+    <div class="mail-row">
+      <input type="checkbox" name="ids" value="{{ r.id }}" aria-label="Select {{ r.name }}">
+      <a class="mail-link" href="{{ url_for('simple.compose', draft=r.id) if r.status == 'draft' else url_for('simple.sent_detail', campaign_id=r.id) }}">
+        <span class="mail-to">{% if r.status == 'draft' %}<span style="color:var(--bad)">Draft</span>{% else %}To: {{ r.people }} {{ 'person' if r.people == 1 else 'people' }}{% endif %}</span>
+        <span class="mail-subject"><strong>{{ r.name }}</strong> <span class="muted">– {{ (r.preview or '')[:110].replace('\n', ' ') }}</span></span>
+        <span class="mail-stats">
+          {% if r.status != 'draft' %}<span class="badge {{ {'completed': 'ok', 'sending': 'info', 'paused': 'warn', 'cancelled': 'bad', 'pending_approval': 'warn', 'scheduled': 'info'}.get(r.status, '') }}">{{ SIMPLE_STATUS.get(r.status, r.status) }}</span>
+          <small class="muted">{{ r.sent }} sent{% if r.delivered %} · {{ r.delivered }} delivered{% endif %}{% if r.replied %} · {{ r.replied }} replied{% endif %}{% if r.problems %} · <span style="color:var(--bad)">{{ r.problems }} failed</span>{% endif %}</small>{% else %}<span class="btn small">Continue</span>{% endif %}
+        </span>
+        <span class="mail-date muted">{{ (r.launched_at or r.updated_at)[5:16] }}</span>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+</form>
+{% if can('edit_campaigns') and folder in ('sent', 'drafts', 'problems') %}
+<form method="post" action="{{ url_for('simple.sent_delete') }}" class="mt" data-confirm="Delete every email in {{ FOLDERS[folder] }}?">{{ csrf() }}
+  <input type="hidden" name="folder_all" value="{{ folder }}"><input type="hidden" name="folder" value="{{ folder }}">
+  <button class="btn small danger" type="submit">Delete all in {{ FOLDERS[folder] }}</button></form>
+{% endif %}
+{% elif q %}
+<div class="empty card"><h3>Nothing found</h3><p>No emails match “{{ q }}”.</p></div>
 {% else %}
-<div class="empty card"><h3>Nothing sent yet</h3><p>Write an email and send it to your contacts, just like in Gmail.</p>
-  {% if can('edit_campaigns') %}<a class="btn primary" href="{{ url_for('simple.compose') }}">✎ Compose your first email</a>{% endif %}</div>
+<div class="empty card"><h3>{{ 'No drafts' if folder == 'drafts' else ('Nothing sent yet' if folder == 'all' else 'Nothing here') }}</h3><p>Write an email and send it to your contacts, just like in Gmail.</p>
+  {% if can('edit_campaigns') %}<a class="btn primary" href="{{ url_for('simple.compose') }}">✎ Compose</a>{% endif %}</div>
 {% endif %}
 {% if drafts %}<p class="muted mt"><small>{{ drafts }} unfinished campaign(s) in <a href="{{ url_for('campaigns.index', status='draft') }}">More tools → Campaigns</a>.</small></p>{% endif %}
 {% endblock %}

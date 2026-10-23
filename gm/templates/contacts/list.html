@@ -11,7 +11,23 @@
 {% if not any_contacts %}
   {{ empty('No contacts yet', 'Import a CSV file, add someone manually, or find addresses that companies publish on their websites.', url_for('contacts.import_upload') if can('edit_contacts') else None, 'Import contacts') }}
 {% else %}
+<nav class="chips group-bar" aria-label="Groups">
+  <a class="chip{% if not filters.tag and not filters.import_id %} on{% endif %}" href="{{ url_for('contacts.index') }}">All contacts <b>{{ everyone }}</b></a>
+  {% for g in groups %}<a class="chip{% if filters.tag == g.name %} on{% endif %}" href="{{ url_for('contacts.index', tag=g.name) }}">👥 {{ g.name }} <b>{{ g.n }}</b></a>{% endfor %}
+  {% for f in files %}<a class="chip{% if filters.import_id == f.id|string %} on{% endif %}" href="{{ url_for('contacts.index', import_id=f.id) }}" title="Imported {{ f.created_at[:16] }}">📄 {{ f.filename[:28] }} <b>{{ f.n }}</b></a>{% endfor %}
+</nav>
+{% if can('delete_contacts') and (filters.tag or filters.import_id) %}
+<div class="notice info group-actions">
+  {% if filters.tag %}<strong>Group “{{ filters.tag }}”</strong> · {{ total }} contacts
+    <form method="post" action="{{ url_for('contacts.delete_group') }}" class="inline" data-confirm="Delete all {{ total }} contacts in “{{ filters.tag }}”?">{{ csrf() }}<input type="hidden" name="tag" value="{{ filters.tag }}"><button class="btn small danger" type="submit">Delete these contacts</button></form>
+    <form method="post" action="{{ url_for('contacts.delete_group') }}" class="inline" data-confirm="Remove the group label “{{ filters.tag }}”? The contacts stay.">{{ csrf() }}<input type="hidden" name="tag" value="{{ filters.tag }}"><input type="hidden" name="keep" value="1"><button class="btn small" type="submit">Remove group only</button></form>
+  {% else %}{% set f = files|selectattr('id', 'equalto', filters.import_id|int)|first %}<strong>Imported file {{ f.filename if f else '' }}</strong> · {{ total }} contacts
+    <form method="post" action="{{ url_for('contacts.delete_import_contacts', import_id=filters.import_id) }}" class="inline" data-confirm="Delete the {{ total }} contacts that came from this file?">{{ csrf() }}<button class="btn small danger" type="submit">Delete this import</button></form>
+  {% endif %}
+</div>
+{% endif %}
 <form class="toolbar card" method="get" aria-label="Filter contacts">
+  {% if filters.import_id %}<input type="hidden" name="import_id" value="{{ filters.import_id }}">{% endif %}
   <div class="field" style="flex:2"><label for="q">Search</label><input id="q" type="search" name="q" value="{{ filters.q }}" placeholder="Email, name or company"></div>
   <div class="field"><label for="f-tag">Tag</label><select id="f-tag" name="tag"><option value="">Any</option>{% for t in all_tags %}<option {% if filters.tag == t.name %}selected{% endif %}>{{ t.name }}</option>{% endfor %}</select></div>
   <div class="field"><label for="f-v">Email check</label><select id="f-v" name="verification_status"><option value="">Any</option>{% for k, v in VERIFICATION.items() %}<option value="{{ k }}" {% if filters.verification_status == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
@@ -28,6 +44,8 @@
   {{ csrf() }}
   <div class="bulkbar" id="bulk">
     <strong><span data-count>0</span> selected</strong>
+    {% if total > contacts|length %}<label class="check" style="margin:0"><input type="checkbox" name="all_matching" value="1"> <span>all {{ total }} matching</span></label>
+    <input type="hidden" name="filters" value="{{ filters|tojson|forceescape }}">{% endif %}
     <input type="text" name="tag" placeholder="Tag name" aria-label="Tag name" style="max-width:160px">
     <button class="btn small" name="action" value="tag">Add tag</button>
     <button class="btn small" name="action" value="untag">Remove tag</button>
@@ -54,5 +72,13 @@
     </tbody></table></div>
 </form>
 {{ pager(page, pages, 'contacts.index', dict(filters, sort=sort, dir=dir)) }}
+{% if can('delete_contacts') %}
+<details class="card more danger-zone mt"><summary>Delete all contacts</summary>
+  <form method="post" action="{{ url_for('contacts.delete_all') }}" class="actions">{{ csrf() }}
+    <span>This deletes all {{ everyone }} contacts. Your do-not-email list is kept. Type <strong>DELETE</strong> to confirm:</span>
+    <input type="text" name="confirm_text" style="max-width:140px" autocomplete="off" aria-label="Type DELETE to confirm">
+    <button class="btn danger" type="submit">Delete all contacts</button></form>
+</details>
+{% endif %}
 {% endif %}
 {% endblock %}

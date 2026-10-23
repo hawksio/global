@@ -191,7 +191,7 @@ def compose():
     # --- Save draft: keep whatever is there, no checks
     if action == "save":
         cid = _save_draft(ws, user, form, draft)
-        flash("Draft saved. Find it at the top of Sent.", "success")
+        flash("Draft saved. Find it in Sent → Drafts.", "success")
         return redirect(url_for("simple.compose", draft=cid))
 
     problems = []
@@ -354,8 +354,23 @@ def mark_business():
     return redirect(request.referrer or url_for("simple.compose"))
 
 
+SENT_FOLDERS = {"all": "All", "sending": "Sending", "scheduled": "Scheduled", "sent": "Sent", "drafts": "Drafts",
+                "problems": "Stopped / paused"}
+FOLDER_SQL = {"all": "(c.status != 'draft' OR c.style = 'plain')", "sending": "c.status = 'sending'", "scheduled": "c.status IN ('scheduled', "
+              "'approved', 'pending_approval')", "sent": "c.status = 'completed'", "drafts": "c.status = 'draft' AND c.style = 'plain'",
+              "problems": "c.status IN ('paused', 'cancelled')"}
+
+
 def sent_page():
     wid = ws_id()
+    folder = request.args.get("folder", "all")
+    folder = folder if folder in SENT_FOLDERS else "all"
+    q = request.args.get("q", "").strip()
+    where, args = [f"c.workspace_id = ?", FOLDER_SQL[folder]], [wid]
+    if q:
+        where.append("(lower(c.name) LIKE ? OR c.id IN (SELECT campaign_id FROM campaign_steps WHERE lower(text_body) LIKE ?) "
+                     "OR c.id IN (SELECT campaign_id FROM campaign_recipients WHERE lower(email) LIKE ?))")
+        args += [f"%{q.lower()}%"] * 3
     rows = query(
         "SELECT c.*, (SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id = c.id) AS people, "
         "(SELECT COUNT(*) FROM messages m WHERE m.campaign_id = c.id AND m.status NOT IN ('queued','cancelled','failed','suppressed')) AS sent, "
@@ -363,18 +378,47 @@ def sent_page():
         "(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id = c.id AND r.replied_at IS NOT NULL) AS replied, "
         "(SELECT COUNT(*) FROM messages m WHERE m.campaign_id = c.id AND m.status IN ('bounced','failed')) AS problems, "
         "(SELECT text_body FROM campaign_steps s WHERE s.campaign_id = c.id AND s.step_no = 0) AS preview "
-        "FROM campaigns c WHERE c.workspace_id = ? AND c.status != 'draft' ORDER BY COALESCE(c.launched_at, c.updated_at) DESC "
-        "LIMIT 100", (wid,))
+        f"FROM campaigns c WHERE {' AND '.join(where)} ORDER BY COALESCE(c.launched_at, c.updated_at) DESC LIMIT 200", args)
+    counts = {k: scalar(f"SELECT COUNT(*) FROM campaigns c WHERE c.workspace_id = ? AND {v}", (wid,)) for k, v in FOLDER_SQL.items()}
     from .main import onboarding_steps
     steps = onboarding_steps(workspace())
     next_step = next((s for s in steps if not s["done"]), None)
-    drafts = scalar("SELECT COUNT(*) FROM campaigns WHERE workspace_id = ? AND status = 'draft' AND style != 'plain'", (wid,))
-    my_drafts = query("SELECT c.id, c.name, c.updated_at, (SELECT text_body FROM campaign_steps s WHERE s.campaign_id = c.id "
-                      "AND s.step_no = 0) AS preview FROM campaigns c WHERE c.workspace_id = ? AND c.status = 'draft' "
-                      "AND c.style = 'plain' ORDER BY c.updated_at DESC", (wid,))
-    return render_template("simple/sent.html", rows=rows, SIMPLE_STATUS=SIMPLE_STATUS, next_step=next_step, drafts=drafts,
-                           my_drafts=my_drafts,
-                           ws=workspace())
+    advanced_drafts = scalar("SELECT COUNT(*) FROM campaigns WHERE workspace_id = ? AND status = 'draft' AND style != 'plain'", (wid,))
+    return render_template("simple/sent.html", rows=rows, SIMPLE_STATUS=SIMPLE_STATUS, next_step=next_step,
+                           drafts=advanced_drafts, folder=folder, q=q, FOLDERS=SENT_FOLDERS, counts=counts, ws=workspace())
+
+
+def _delete_campaigns(wid, ids):
+    """Delete emails from Sent: stop anything still going, then remove the email and its sending log.
+    Do-not-email entries and contacts are not touched."""
+    n = 0
+    for cid in ids:
+        c = query("SELECT * FROM campaigns WHERE id = ? AND workspace_id = ?", (cid, wid), one=True)
+        if not c:
+            continue
+        with transaction():
+            execute("UPDATE messages SET status = 'cancelled', next_attempt_at = NULL WHERE campaign_id = ? AND status = 'queued'",
+                    (cid,))
+            execute("DELETE FROM messages WHERE campaign_id = ?", (cid,))
+            execute("DELETE FROM campaigns WHERE id = ?", (cid,))
+        audit("campaign.deleted", target=cid, detail=c["name"][:100])
+        n += 1
+    return n
+
+
+@bp.route("/sent/delete", methods=["POST"])
+@require("edit_campaigns")
+def sent_delete():
+    ids = [int(i) for i in request.form.getlist("ids") if i.isdigit()]
+    if request.form.get("folder_all") in FOLDER_SQL:
+        ids = [r["id"] for r in query(f"SELECT c.id FROM campaigns c WHERE c.workspace_id = ? AND "
+                                      f"{FOLDER_SQL[request.form['folder_all']]}", (ws_id(),))]
+    if not ids:
+        flash("Tick at least one email first.", "error")
+        return redirect(request.referrer or url_for("simple.sent"))
+    n = _delete_campaigns(ws_id(), ids)
+    flash(f"Deleted {n} email{'s' if n != 1 else ''}. Anything still sending was stopped first.", "success")
+    return redirect(url_for("simple.sent", folder=request.form.get("folder", "all")))
 
 
 @bp.route("/sent")
@@ -443,6 +487,10 @@ def person_stop(campaign_id, recipient_id):
 def sent_action(campaign_id, action):
     from . import campaigns as cm
     c = _campaign(campaign_id)
+    if action == "delete":
+        _delete_campaigns(c["workspace_id"], [c["id"]])
+        flash("Email deleted.", "success")
+        return redirect(url_for("simple.sent"))
     handlers = {"pause": cm.pause, "resume": cm.resume, "cancel": cm.cancel, "approve": cm.send_now}
     if action not in handlers:
         abort(404)
