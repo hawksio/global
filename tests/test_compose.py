@@ -131,17 +131,32 @@ class Compose(AppCase):
         self.post(f"/sent/{cid}/approve")
         self.assertEqual(query("SELECT status FROM campaigns", one=True)["status"], "scheduled")
 
+    def test_first_emails_go_immediately_at_the_chosen_speed(self):
+        from gm.db import query
+        live(self)
+        for i in range(5):
+            self.contact(f"p{i}@good.test")
+        r = self.send(speed="2")
+        self.assertEqual(len(self.provider.sent), 2, "the first minute's emails go out the moment you press Send")
+        self.assertEqual(query("SELECT rate_per_minute FROM campaigns", one=True)["rate_per_minute"], 2)
+        self.assertIn("2 sent straight away", self.client.get(r.headers["Location"]).get_data(as_text=True))
+        self.run_jobs()
+        self.assertEqual(len(self.provider.sent), 4, "then about 2 a minute; never the same person twice")
+        self.assertEqual(len({p["to"][0] for p, _ in self.provider.sent}), 4)
+
     def test_stop_from_sent_page(self):
         from gm.db import query
         live(self)
-        self.contact("ann@good.test")
-        self.send()
+        for i in range(4):
+            self.contact(f"p{i}@good.test")
+        self.send(speed="2")
+        self.assertEqual(len(self.provider.sent), 2)
         cid = query("SELECT id FROM campaigns", one=True)["id"]
         self.assertIn("Stop", self.client.get(f"/sent/{cid}").get_data(as_text=True))
         r = self.post(f"/sent/{cid}/cancel")
         self.assertEqual(r.headers["Location"], f"/sent/{cid}")
         self.run_jobs()
-        self.assertEqual(self.provider.sent, [])
+        self.assertEqual(len(self.provider.sent), 2, "nothing more after Stop")
 
 
 class EasierBasics(AppCase):

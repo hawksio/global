@@ -21,6 +21,8 @@ from .security import audit, can, current_user, require, workspace, ws_id
 bp = Blueprint("simple", __name__)
 
 READY_STATUSES = ["validated", "unknown"]
+SPEEDS = {"2": "Gently: about 2 a minute (best for a new domain or a big list)",
+          "10": "Normal: about 10 a minute", "30": "Fast: about 30 a minute (only for an established domain)"}
 SIMPLE_STATUS = {"draft": "Draft", "pending_approval": "Waiting for approval", "approved": "Ready", "scheduled": "Scheduled",
                  "sending": "Sending", "paused": "Paused", "completed": "Sent", "cancelled": "Cancelled"}
 FOLLOW_UP_TEXT = ("Hi {{first_name|there}},\n\nI'm following up on my last email in case it got buried. "
@@ -129,6 +131,7 @@ def compose():
                 "subject": f.get("subject", ""), "body": f.get("body", ""), "follow_up": f.get("follow_up") == "on",
                 "follow_days": f.get("follow_days", "3"), "follow_body": f.get("follow_body", FOLLOW_UP_TEXT),
                 "when": f.get("when", ""), "permission": f.get("permission") == "on",
+                "speed": f.get("speed", "10") if f.get("speed") in SPEEDS else "10",
                 "company_address": f.get("company_address", ""), "sender_email": f.get("sender_email", "")}
     elif draft:
         seg = json.loads(draft["segment"])
@@ -137,13 +140,14 @@ def compose():
                 "subject": steps[0]["subject"] if steps else draft["name"], "body": steps[0]["text_body"] if steps else "",
                 "follow_up": len(steps) > 1, "follow_days": str(steps[1]["delay_days"]) if len(steps) > 1 else "3",
                 "follow_body": steps[1]["text_body"] if len(steps) > 1 else FOLLOW_UP_TEXT, "when": "",
-                "permission": bool(seg.get("_pasted")), "company_address": "", "sender_email": ""}
+                "permission": bool(seg.get("_pasted")), "company_address": "", "sender_email": "",
+                "speed": str(draft["rate_per_minute"]) if str(draft["rate_per_minute"]) in SPEEDS else "10"}
     else:
         ready = _ready_count(wid)
         form = {"to_mode": request.args.get("to", "all" if ready else "paste"), "pasted": "",
                 "from_name": ws["sender_name"] or user["full_name"], "subject": "", "body": "", "follow_up": False,
                 "follow_days": "3", "follow_body": FOLLOW_UP_TEXT, "when": "", "permission": False,
-                "company_address": "", "sender_email": ""}
+                "company_address": "", "sender_email": "", "speed": "10"}
 
     def page(problems=(), code=200, hints=None):
         current = workspace()
@@ -151,7 +155,7 @@ def compose():
                 for t in query("SELECT name FROM tags WHERE workspace_id = ? AND name NOT LIKE 'compose-%' ORDER BY name", (wid,))]
         no_permission = scalar("SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND sandbox = 0 AND status = 'active' "
                                "AND lawful_basis = 'unknown'", (wid,))
-        return render_template("simple/compose.html", form=form, tags=tags, problems=list(problems), ws=current,
+        return render_template("simple/compose.html", form=form, tags=tags, problems=list(problems), ws=current, SPEEDS=SPEEDS,
                                ready_all=_ready_count(wid), draft=draft, no_permission=no_permission, hints=hints), code
 
     if request.method != "POST":
@@ -267,9 +271,16 @@ def compose():
     n = launch_campaign(query("SELECT * FROM campaigns WHERE id = ?", (cid,), one=True), workspace(), start_at)
     audit("campaign.launched", target=cid, detail=f"{n} recipients, start {start_at} UTC")
     jobs.enqueue("send_campaigns", dedupe_key="send_campaigns")
+    first = 0
+    if start_at <= now():
+        from .campaigns import send_first_batch
+        first = send_first_batch(cid)
     practice = " (practice mode: nothing is really sent)" if ws["sandbox_mode"] else ""
+    rate = int(form["speed"])
+    left = max(0, n - first)
+    eta = "" if not left else f" The other {left} follow at about {rate} a minute (around {max(1, -(-left // rate))} min)."
     flash((f"Scheduled for {n} people{practice}." if start_at > now() else
-           f"Sending to {n} people{practice}. Emails go out gently, about 2 a minute."), "success")
+           f"Sending to {n} people{practice}. {first} sent straight away.{eta}"), "success")
     return redirect(url_for("simple.sent_detail", campaign_id=cid))
 
 
@@ -284,17 +295,18 @@ def _save_draft(ws, user, form, draft):
     with transaction():
         if draft:
             cid = draft["id"]
-            execute("UPDATE campaigns SET name = ?, segment = ?, from_name = ?, from_email = ?, reply_to = ?, updated_at = ? "
-                    "WHERE id = ?", (subject, json.dumps(segment), form["from_name"].strip()[:100], ws["sender_email"],
-                                     ws["reply_to"] or ws["sender_email"], now(), cid))
+            execute("UPDATE campaigns SET name = ?, segment = ?, from_name = ?, from_email = ?, reply_to = ?, "
+                    "rate_per_minute = ?, updated_at = ? WHERE id = ?",
+                    (subject, json.dumps(segment), form["from_name"].strip()[:100], ws["sender_email"],
+                     ws["reply_to"] or ws["sender_email"], int(form["speed"]), now(), cid))
             execute("DELETE FROM campaign_steps WHERE campaign_id = ?", (cid,))
         else:
             cid = execute("INSERT INTO campaigns (workspace_id, name, status, segment, from_name, from_email, reply_to, timezone, "
                           "send_window_start, send_window_end, send_days, rate_per_minute, dry_run, style, created_by, "
-                          "created_at, updated_at) VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, 0, 24, '0,1,2,3,4,5,6', 2, 0, 'plain', "
+                          "created_at, updated_at) VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, 0, 24, '0,1,2,3,4,5,6', ?, 0, 'plain', "
                           "?, ?, ?)", (ws["id"], subject, json.dumps(segment), form["from_name"].strip()[:100],
-                                       ws["sender_email"], ws["reply_to"] or ws["sender_email"], ws["timezone"], user["id"],
-                                       now(), now()))
+                                       ws["sender_email"], ws["reply_to"] or ws["sender_email"], ws["timezone"],
+                                       int(form["speed"]), user["id"], now(), now()))
         execute("INSERT INTO campaign_steps (campaign_id, step_no, delay_days, subject, html_body, text_body) "
                 "VALUES (?, 0, 0, ?, ?, ?)", (cid, subject, text_to_html(body), body))
         if form["follow_up"] and form["follow_body"].strip():

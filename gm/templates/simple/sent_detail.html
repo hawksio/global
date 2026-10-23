@@ -13,7 +13,7 @@
   </div></div>
 
 {% if c.status in ('scheduled', 'sending') %}
-<div class="card"><p><strong>Sending…</strong> {{ done }} of {{ total }} done. Emails go out gently (about 2 a minute) to protect your reputation; you can leave this page.</p>
+<div class="card"><p><strong>Sending…</strong> {{ done }} of {{ total }} done. About {{ c.rate_per_minute }} a minute, to protect your sender reputation. You can leave this page.</p>
   <div class="progress"><span style="width: {{ (100 * done / total)|int if total else 0 }}%"></span></div></div>
 {% endif %}
 {% if c.pause_reason and c.status == 'paused' %}<div class="notice warn">{{ c.pause_reason }}</div>{% endif %}

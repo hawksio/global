@@ -839,6 +839,29 @@ def retry_messages(ws, budget):
     return n
 
 
+def send_first_batch(campaign_id):
+    """Send the first minute's emails straight away (the background sender then carries on every minute).
+    Same rules as the background sender; the per-message idempotency key means the two can't double-send."""
+    c = query("SELECT * FROM campaigns WHERE id = ?", (campaign_id,), one=True)
+    ws = query("SELECT * FROM workspaces WHERE id = ?", (c["workspace_id"],), one=True) if c else None
+    if not c or c["status"] not in ("scheduled", "sending") or (c["scheduled_at"] and c["scheduled_at"] > now()):
+        return 0
+    if ws["sending_paused_reason"] or check_thresholds(ws):
+        return 0
+    simulate = bool(c["dry_run"] or ws["sandbox_mode"])
+    budget = 500 if simulate else max(0, min(ws["hourly_send_limit"] - _sent_since(ws["id"], "-1 hour"),
+                                              ws["daily_send_limit"] - _sent_since(ws["id"], "-1 day")))
+    if budget <= 0:
+        return 0
+    sent, stop = process_campaign(c, ws, budget)
+    if stop:
+        if "API key" in stop:
+            pause_workspace(ws, stop)
+        else:
+            execute("UPDATE campaigns SET status = 'paused', pause_reason = ? WHERE id = ?", (stop[:300], c["id"]))
+    return sent
+
+
 @jobs.handler("send_campaigns")
 def _send_campaigns(ctx):
     total = 0
