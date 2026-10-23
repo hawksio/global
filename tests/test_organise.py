@@ -77,6 +77,17 @@ class OrganiseContacts(AppCase):
         self.assertEqual(scalar("SELECT status FROM imports WHERE id = ?", (imp,)), "completed")
         self.assertEqual(scalar("SELECT COUNT(*) FROM contacts"), 2)
 
+    def test_imported_contacts_can_be_emailed_and_are_checked_afterwards(self):
+        from gm.db import query, scalar
+        self.import_file(["ann@good.test", "bob@good.test"])
+        self.assertIn("Everyone in my contacts (2)", self.client.get("/compose").get_data(as_text=True))
+        job = query("SELECT * FROM jobs WHERE kind = 'verify_contacts'", one=True)
+        self.assertIsNotNone(job, "a background domain check is queued after a fast import")
+        r = self.post("/compose", {"to_mode": "all", "from_name": "Olive", "subject": "Hello", "body": "Hi there",
+                                   "action": "send", "speed": "10"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(scalar("SELECT COUNT(*) FROM campaign_recipients"), 2)
+
     def test_bulk_action_on_all_matching(self):
         import json
         from gm.db import scalar

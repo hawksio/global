@@ -673,6 +673,13 @@ def _run_import(ctx):
             "suppressed = ?, review = ? WHERE id = ?", (now(), counts["accepted"], counts["rejected"], counts["duplicates"],
                                                        counts["invalid"], counts["suppressed"], counts["review"], imp["id"]))
     ctx.progress(len(rows), len(rows), "Import finished")
+    if not opts.get("dns"):
+        # The fast import only checked the format; check every new address's domain in the background.
+        ids = [r["id"] for r in query("SELECT id FROM contacts WHERE workspace_id = ? AND import_id = ? AND "
+                                      "verification_status = 'unverified'", (wid, imp["id"]))]
+        if ids:
+            jobs.enqueue("verify_contacts", {"ids": ids}, workspace_id=wid, user_id=ctx.user_id, total=len(ids),
+                         dedupe_key=f"verify-import:{imp['id']}")
     return counts
 
 

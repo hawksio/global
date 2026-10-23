@@ -20,7 +20,8 @@ from .security import audit, can, current_user, require, workspace, ws_id
 
 bp = Blueprint("simple", __name__)
 
-READY_STATUSES = ["validated", "unknown"]
+# "unverified" = syntax and disposable-domain checked at import; the full (DNS) check runs in the background afterwards.
+READY_STATUSES = ["validated", "unknown", "unverified"]
 SPEEDS = {"2": "Gently: about 2 a minute (best for a new domain or a big list)",
           "10": "Normal: about 10 a minute", "30": "Fast: about 30 a minute (only for an established domain)"}
 SIMPLE_STATUS = {"draft": "Draft", "pending_approval": "Waiting for approval", "approved": "Ready", "scheduled": "Scheduled",
