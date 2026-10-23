@@ -36,7 +36,7 @@
   </div>
   <div class="compose-paste" data-show-when="paste">
     <textarea name="pasted" rows="2" placeholder="name@company.com, another@company.com">{{ form.pasted }}</textarea>
-    <label class="check"><input type="checkbox" name="permission" {% if form.permission %}checked{% endif %}> <span>These are business contacts I have a genuine reason to email.</span></label>
+    <label class="check{% if problems and not form.permission %} needs-tick{% endif %}"><input type="checkbox" name="permission" {% if form.permission %}checked{% endif %}> <span>These are business contacts I have a genuine reason to email.</span></label>
   </div>
   <div class="compose-row"><label for="from_name">From</label>
     <input id="from_name" type="text" name="from_name" value="{{ form.from_name }}" placeholder="Your name">

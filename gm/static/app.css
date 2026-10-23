@@ -276,3 +276,5 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
 .chip.on { background: color-mix(in srgb, var(--brand) 14%, var(--panel)); border-color: var(--brand); }
 .group-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .danger-zone > summary { color: var(--bad); }
+
+.check.needs-tick { outline: 2px solid var(--bad); outline-offset: 4px; border-radius: 6px; }

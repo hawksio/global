@@ -150,3 +150,37 @@ class ServiceChoiceTests(AppCase):
     def test_rejects_a_url_as_server(self):
         self.save_smtp(smtp_host="https://mail.sender.test/")
         self.assertEqual(self.ws()["smtp_host"], "")
+
+
+class SendThroughSmtp(AppCase):
+    """Compose -> campaign -> SMTP, with no fake provider in between."""
+    def setUp(self):
+        super().setUp()
+        FakeSMTP.instances, FakeSMTP.login_error, FakeSMTP.send_errors = [], None, []
+        self.patches = [mock.patch("smtplib.SMTP", FakeSMTP), mock.patch("smtplib.SMTP_SSL", FakeSMTP)]
+        for p in self.patches:
+            p.start()
+        self.app.config["MAIL_PROVIDER_FACTORY"] = None
+        self.login()
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+        super().tearDown()
+
+    def test_compose_sends_through_smtp(self):
+        from gm.db import execute, query
+        from gm.security import set_secret
+        execute("UPDATE workspaces SET sandbox_mode = 0, email_provider = 'smtp', smtp_host = 'mail.sender.test', "
+                "smtp_port = 465, smtp_security = 'ssl', smtp_username = 'olive@sender.test' WHERE id = ?", (self.ws_id,))
+        set_secret(self.ws_id, "smtp_password", "pw")
+        r = self.post("/compose", {"to_mode": "paste", "pasted": "ann@good.test, bob@good.test", "permission": "on",
+                                   "from_name": "Olive", "subject": "Quick question", "body": "Hi {{first_name|there}}",
+                                   "action": "send", "speed": "10"})
+        self.assertEqual(r.status_code, 302, r.get_data(as_text=True)[:3000])
+        sent = [m for conn in FakeSMTP.instances for m in conn.sent]
+        self.assertEqual(sorted(m["To"] for m in sent), ["ann@good.test", "bob@good.test"])
+        self.assertEqual(len(FakeSMTP.instances), 1, "one connection for the batch")
+        self.assertIn("Hi there", sent[0].get_content())
+        rows = query("SELECT status, provider FROM messages WHERE category = 'marketing'")
+        self.assertTrue(all((m["status"], m["provider"]) == ("accepted", "smtp") for m in rows))

@@ -130,6 +130,10 @@ def compose():
         if not draft:
             abort(404)
 
+    # Once someone has confirmed their typed addresses are business contacts, the box starts ticked for them.
+    confirmed_before = bool(scalar("SELECT 1 FROM audit_log WHERE user_id = ? AND action = 'compose.business_confirmed' LIMIT 1",
+                                   (user["id"],)))
+
     # --- what's on the form
     if request.method == "POST":
         form = {"to_mode": f.get("to_mode", "all"), "pasted": f.get("pasted", ""), "from_name": f.get("from_name", ""),
@@ -145,13 +149,13 @@ def compose():
                 "subject": steps[0]["subject"] if steps else draft["name"], "body": steps[0]["text_body"] if steps else "",
                 "follow_up": len(steps) > 1, "follow_days": str(steps[1]["delay_days"]) if len(steps) > 1 else "3",
                 "follow_body": steps[1]["text_body"] if len(steps) > 1 else FOLLOW_UP_TEXT, "when": "",
-                "permission": bool(seg.get("_pasted")), "company_address": "", "sender_email": "",
+                "permission": confirmed_before, "company_address": "", "sender_email": "",
                 "speed": str(draft["rate_per_minute"]) if str(draft["rate_per_minute"]) in SPEEDS else "10"}
     else:
         ready = _ready_count(wid)
         form = {"to_mode": request.args.get("to", "all" if ready else "paste"), "pasted": "",
                 "from_name": ws["sender_name"] or user["full_name"], "subject": "", "body": "", "follow_up": False,
-                "follow_days": "3", "follow_body": FOLLOW_UP_TEXT, "when": "", "permission": False,
+                "follow_days": "3", "follow_body": FOLLOW_UP_TEXT, "when": "", "permission": confirmed_before,
                 "company_address": "", "sender_email": "", "speed": "10"}
 
     def page(problems=(), code=200, hints=None):
@@ -226,14 +230,17 @@ def compose():
         addresses, invalid = _parse_addresses(form["pasted"])
         if not addresses:
             problems.append("Type or paste at least one email address.")
-        if not form["permission"]:
-            problems.append("Tick the box under the addresses to confirm they're business contacts you have a reason to email.")
+        if not form["permission"] and not _already_ok(wid, addresses):
+            problems.append("Tick “These are business contacts I have a genuine reason to email” under the addresses "
+                            "(you only need to do this once).")
         if invalid:
             problems.append("These don't look like email addresses: " + ", ".join(invalid[:10]))
         if problems:
             return page(problems, 400)
 
     cid = _save_draft(ws, user, form, draft)
+    if form["to_mode"] == "paste" and form["permission"] and not confirmed_before:
+        audit("compose.business_confirmed", detail=f"{len(addresses)} typed addresses")
     if form["to_mode"] == "paste":
         tag = f"compose-{cid}"
         for email in addresses:
@@ -295,6 +302,17 @@ def compose():
     flash((f"Scheduled for {n} people{practice}." if start_at > now() else
            f"Sending to {n} people{practice}. {first} sent straight away.{eta}"), "success")
     return redirect(url_for("simple.sent_detail", campaign_id=cid))
+
+
+def _already_ok(wid, addresses):
+    """True when every typed address is a teammate or a contact already confirmed as a business contact."""
+    for email in addresses:
+        e = email.strip().lower()
+        if not (scalar("SELECT 1 FROM users WHERE workspace_id = ? AND lower(email) = ?", (wid, e)) or
+                scalar("SELECT 1 FROM contacts WHERE workspace_id = ? AND email_normalized = ? AND recipient_type = 'business' "
+                       "AND lawful_basis IN ('legitimate_interest', 'consent', 'contract')", (wid, e))):
+            return False
+    return True
 
 
 def _save_draft(ws, user, form, draft):

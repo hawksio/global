@@ -44,6 +44,15 @@ class Compose(AppCase):
         self.assertIn("genuine reason", r.get_data(as_text=True))
         self.assertEqual(scalar("SELECT COUNT(*) FROM campaigns"), 0)
 
+    def test_business_tick_is_remembered_and_skipped_for_known_contacts(self):
+        self.contact("known@good.test")
+        r = self.send(to_mode="paste", pasted="known@good.test")
+        self.assertEqual(r.status_code, 302, "already a business contact: no tick needed")
+        self.assertNotIn('name="permission" checked', self.client.get("/compose").get_data(as_text=True))
+        self.send(to_mode="paste", pasted="new@good.test", permission="on")
+        self.assertIn('name="permission" checked', self.client.get("/compose").get_data(as_text=True),
+                      "after confirming once, the box starts ticked")
+
     def test_real_send_is_plain_personal_style(self):
         live(self)
         self.contact("ann@good.test", first_name="Ann")
