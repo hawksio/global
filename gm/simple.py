@@ -130,9 +130,8 @@ def compose():
         if not draft:
             abort(404)
 
-    # Once someone has confirmed their typed addresses are business contacts, the box starts ticked for them.
-    confirmed_before = bool(scalar("SELECT 1 FROM audit_log WHERE user_id = ? AND action = 'compose.business_confirmed' LIMIT 1",
-                                   (user["id"],)))
+    # The business-contact statement stays visible under typed addresses but starts ticked; unticking it blocks sending.
+    confirmed_before = True
 
     # --- what's on the form
     if request.method == "POST":
@@ -231,15 +230,14 @@ def compose():
         if not addresses:
             problems.append("Type or paste at least one email address.")
         if not form["permission"] and not _already_ok(wid, addresses):
-            problems.append("Tick “These are business contacts I have a genuine reason to email” under the addresses "
-                            "(you only need to do this once).")
+            problems.append("Tick “These are business contacts I have a genuine reason to email” under the addresses.")
         if invalid:
             problems.append("These don't look like email addresses: " + ", ".join(invalid[:10]))
         if problems:
             return page(problems, 400)
 
     cid = _save_draft(ws, user, form, draft)
-    if form["to_mode"] == "paste" and form["permission"] and not confirmed_before:
+    if form["to_mode"] == "paste":
         audit("compose.business_confirmed", detail=f"{len(addresses)} typed addresses")
     if form["to_mode"] == "paste":
         tag = f"compose-{cid}"
