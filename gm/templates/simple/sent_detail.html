@@ -26,7 +26,10 @@
   <section class="card"><h2>People</h2>
     <div class="table-wrap"><table><thead><tr><th>Email</th><th>Status</th><th></th></tr></thead><tbody>
     {% for p in people %}<tr><td>{{ p.email }}{% if p.company %}<br><small class="muted">{{ p.company }}</small>{% endif %}</td>
-      <td>{% if p.replied_at %}<span class="badge ok">Replied</span>{% elif p.last_status %}{{ mbadge(p.last_status) }}{% elif p.status == 'stopped' %}<span class="badge warn">Skipped</span>{% else %}<span class="badge">Waiting</span>{% endif %}
+      <td>{% if p.replied_at %}<span class="badge ok">Replied</span>{% elif p.last_status %}{{ mbadge(p.last_status) }}{% elif p.status == 'stopped' %}<span class="badge warn">Skipped</span>{% else %}<span class="badge">Waiting</span>
+          {% if p.wait_reason %}<br><small class="muted">{{ p.wait_reason }}</small>
+            {% if can('approve_campaigns') and 'emailed' in p.wait_reason %}<form method="post" action="{{ url_for('simple.person_now', campaign_id=c.id, recipient_id=p.id) }}" data-confirm="Send to {{ p.email }} now, even though they were emailed recently?">{{ csrf() }}<button class="btn small" type="submit">Send now anyway</button></form>{% endif %}
+          {% endif %}{% endif %}
         {% if p.stop_reason and not p.replied_at %}<br><small class="muted">{{ p.stop_reason }}</small>{% endif %}
         {% if p.last_error %}<br><small style="color:var(--bad)">{{ p.last_error[:120] }}</small>{% endif %}</td>
       <td>{% if can('edit_campaigns') and p.stop_reason != 'Unsubscribed' %}<form method="post" action="{{ url_for('simple.person_stop', campaign_id=c.id, recipient_id=p.id) }}" data-confirm="Add {{ p.email }} to your do-not-email list?">{{ csrf() }}<button class="btn small" type="submit" title="They replied asking not to be emailed">Asked to stop</button></form>{% endif %}

@@ -222,3 +222,34 @@ class EasierBasics(AppCase):
         self.assertEqual(query("SELECT sandbox_mode FROM workspaces", one=True)["sandbox_mode"], 1)
         from gm.security import get_secret
         self.assertEqual(get_secret(self.ws_id, "resend_api_key"), "re_abcdefghijklmnop", "empty field keeps the key")
+
+
+class Waiting(AppCase):
+    def setUp(self):
+        super().setUp()
+        self.login()
+
+    def test_recently_emailed_person_is_held_with_a_reason_and_can_be_sent_anyway(self):
+        from gm.db import execute, query
+        from tests_live import live_mode
+        live_mode(self)
+        cid_contact = self.contact("ann@good.test")
+        execute("UPDATE contacts SET last_contacted_at = datetime('now', '-2 hours') WHERE id = ?", (cid_contact,))
+        r = self.post("/compose", {"to_mode": "all", "subject": "Again", "body": "Hi {{first_name|there}}",
+                                   "from_name": "Olive", "action": "send"})
+        self.assertEqual(self.provider.sent, [], "held by the minimum-gap rule")
+        page = self.client.get(r.headers["Location"]).get_data(as_text=True)
+        self.assertIn("emailed in the last 72 hours", page)
+        self.assertIn("Already emailed at", page)
+        self.assertIn("Send now anyway", page)
+        camp = query("SELECT id FROM campaigns", one=True)["id"]
+        rid = query("SELECT id FROM campaign_recipients", one=True)["id"]
+        self.post(f"/sent/{camp}/people/{rid}/now")
+        self.assertEqual(len(self.provider.sent), 1)
+        self.assertEqual(query("SELECT wait_reason FROM campaign_recipients", one=True)["wait_reason"], "")
+
+    def test_from_name_is_required(self):
+        r = self.post("/compose", {"to_mode": "paste", "pasted": "a@good.test", "permission": "on", "subject": "Hi",
+                                   "body": "Hello", "from_name": "", "action": "send"})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Add your name in From", r.get_data(as_text=True))

@@ -71,6 +71,11 @@ def promotions_hints(subject, body):
     if words:
         hints.append("Salesy words like " + ", ".join(f"“{w.strip()}”" for w in words[:4]) +
                      " make Gmail think it's a promotion. Say it the way you would to a colleague.")
+    risky = [w for w in ("loan", "credit", "debt", "investment", "guaranteed", "cash", "earn", "income", "crypto",
+                         "bitcoin", "casino", "viagra") if re.search(rf"\b{w}", text)]
+    if risky:
+        hints.append("Words like " + ", ".join(f"“{w}”" for w in risky[:3]) + " are watched closely by spam filters. "
+                     "Describe what you do in plain terms, e.g. “business financing” instead of “loan”, and avoid it in the subject.")
     links = len(re.findall(r"https?://|www\.", text))
     if links > 1:
         hints.append(f"{links} links: keep it to one (or none) in a first email.")
@@ -190,6 +195,8 @@ def compose():
         return redirect(url_for("simple.compose", draft=cid))
 
     problems = []
+    if not form["from_name"].strip():
+        problems.append("Add your name in From (people see it in their inbox).")
     if not subject:
         problems.append("Add a subject.")
     if not body:
@@ -276,6 +283,12 @@ def compose():
         from .campaigns import send_first_batch
         first = send_first_batch(cid)
     practice = " (practice mode: nothing is really sent)" if ws["sandbox_mode"] else ""
+    held = scalar("SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status = 'active' "
+                  "AND wait_reason LIKE 'Already emailed%'", (cid,))
+    if held:
+        flash(f"{held} {'person was' if held == 1 else 'people were'} emailed in the last "
+              f"{ws['min_hours_between_emails']} hours, so they'll get this later. You can send now anyway from the "
+              "list below, or change the gap in Settings > Advanced.", "info")
     rate = int(form["speed"])
     left = max(0, n - first)
     eta = "" if not left else f" The other {left} follow at about {rate} a minute (around {max(1, -(-left // rate))} min)."
@@ -390,6 +403,23 @@ def sent_detail(campaign_id):
     done = sum(1 for p in people if p["status"] != "active" or (p["last_status"] and p["next_step"] > 0))
     return render_template("simple/sent_detail.html", c=c, steps=steps_of(c["id"]), people=people, total=total, done=done,
                            SIMPLE_STATUS=SIMPLE_STATUS)
+
+
+@bp.route("/sent/<int:campaign_id>/people/<int:recipient_id>/now", methods=["POST"])
+@require("approve_campaigns")
+def person_now(campaign_id, recipient_id):
+    """Skip the minimum-gap rule for this one person and send right away."""
+    from .campaigns import send_first_batch
+    c = _campaign(campaign_id)
+    r = query("SELECT * FROM campaign_recipients WHERE id = ? AND campaign_id = ? AND status = 'active'",
+              (recipient_id, c["id"]), one=True)
+    if not r:
+        abort(404)
+    execute("UPDATE campaign_recipients SET ignore_gap = 1, next_send_at = ?, wait_reason = '' WHERE id = ?", (now(), r["id"]))
+    audit("campaign.gap_override", target=r["email"], detail=f"campaign {c['id']}")
+    sent = send_first_batch(c["id"])
+    flash(f"Sent to {r['email']}." if sent else "Queued: it goes out within a minute.", "success")
+    return redirect(url_for("simple.sent_detail", campaign_id=c["id"]))
 
 
 @bp.route("/sent/<int:campaign_id>/people/<int:recipient_id>/stop", methods=["POST"])

@@ -710,7 +710,12 @@ def _payload(c, ws, contact, step, message_id):
     return payload
 
 
+def r_short(ts):
+    return (ts or "")[5:16]
+
+
 def _advance(c, recipient, step_no, simulated):
+    execute("UPDATE campaign_recipients SET wait_reason = '', ignore_gap = 0 WHERE id = ?", (recipient["id"],))
     nxt = query("SELECT delay_days FROM campaign_steps WHERE campaign_id = ? AND step_no = ?", (c["id"], step_no + 1), one=True)
     if nxt:
         execute("UPDATE campaign_recipients SET next_step = ?, next_send_at = datetime('now', ?) WHERE id = ? AND status = 'active'",
@@ -783,11 +788,17 @@ def process_campaign(c, ws, budget):
             continue
         if not simulate:
             if not in_window(c, contact["timezone"] or c["timezone"]):
+                execute("UPDATE campaign_recipients SET wait_reason = ? WHERE id = ?",
+                        (f"Outside your sending hours ({c['send_window_start']}:00-{c['send_window_end']}:00)", r["id"]))
                 continue
             last = parse_ts(contact["last_contacted_at"])
             gap = timedelta(hours=ws["min_hours_between_emails"])
-            if last and datetime.now(timezone.utc) - last < gap:
-                execute("UPDATE campaign_recipients SET next_send_at = ? WHERE id = ?", (fmt_ts(last + gap), r["id"]))
+            if last and datetime.now(timezone.utc) - last < gap and not r["ignore_gap"]:
+                when = fmt_ts(last + gap)
+                execute("UPDATE campaign_recipients SET next_send_at = ?, wait_reason = ? WHERE id = ?",
+                        (when, f"Already emailed at {r_short(contact['last_contacted_at'])} UTC. To protect your reputation "
+                               f"they get this at {r_short(when)} UTC (min. {ws['min_hours_between_emails']} hours apart).",
+                         r["id"]))
                 continue
         step = query("SELECT * FROM campaign_steps WHERE campaign_id = ? AND step_no = ?", (c["id"], r["next_step"]), one=True)
         if not step:

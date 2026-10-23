@@ -487,9 +487,17 @@ M2_PLAIN_STYLE = """
 ALTER TABLE campaigns ADD COLUMN style TEXT NOT NULL DEFAULT 'branded';
 """
 
+M3_WAIT_REASON = """
+-- Why an active recipient hasn't been emailed yet (shown on the Sent page), and a per-person
+-- "send now anyway" that skips the minimum-gap rule for that one email.
+ALTER TABLE campaign_recipients ADD COLUMN wait_reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE campaign_recipients ADD COLUMN ignore_gap INTEGER NOT NULL DEFAULT 0;
+"""
+
 MIGRATIONS = [
     (1, "initial schema", M1_INITIAL),
     (2, "campaign email style", M2_PLAIN_STYLE),
+    (3, "recipient wait reason", M3_WAIT_REASON),
 ]
 
 _migrate_lock = threading.Lock()
