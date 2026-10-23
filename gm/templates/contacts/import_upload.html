@@ -10,7 +10,8 @@
   </form>
   <div class="notice info mt"><p>Importing doesn't make anyone eligible for marketing. Each contact keeps its source, purpose and permission to email, and campaigns only include contacts that qualify.</p></div>
 </section>
-<section class="card"><h2>Recent imports</h2>
+<section class="card"><div class="page-head" style="margin:0"><h2>Recent imports</h2>
+  {% if imports and can('delete_contacts') %}<form method="post" action="{{ url_for('contacts.delete_all_imported') }}" class="inline" data-confirm="Delete every contact that came from an imported file? Contacts you added yourself stay. Your do-not-email list is kept.">{{ csrf() }}<button class="btn small danger" type="submit">🗑 Delete all imported contacts</button></form>{% endif %}</div>
   <div class="table-wrap"><table><thead><tr><th>File</th><th>Status</th><th class="num">Rows</th><th class="num">Accepted</th><th class="num">Review</th><th class="num">Duplicates</th><th class="num">Invalid</th><th class="num">Suppressed</th><th class="num">Rejected</th><th>Uploaded</th><th></th></tr></thead><tbody>
   {% for i in imports %}<tr><td><a href="{{ url_for('contacts.import_status', import_id=i.id) }}">{{ i.filename }}</a></td><td>{{ jbadge(i.status) }}</td><td class="num">{{ i.total_rows }}</td><td class="num">{{ i.accepted }}</td><td class="num">{{ i.review }}</td><td class="num">{{ i.duplicates }}</td><td class="num">{{ i.invalid }}</td><td class="num">{{ i.suppressed }}</td><td class="num">{{ i.rejected }}</td><td><small>{{ i.created_at|dt }}</small></td>
   <td>{% if i.status == 'completed' and can('delete_contacts') %}<a class="btn small" href="{{ url_for('contacts.index', import_id=i.id) }}">View</a>

@@ -90,13 +90,16 @@ class Context:
             raise Cancelled()
 
 
-def _claim():
+def _claim(job_id=None):
     # Requeue jobs whose worker stopped sending heartbeats.
     execute("UPDATE jobs SET status = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'queued' END, "
             "error = CASE WHEN attempts >= max_attempts THEN 'Worker stopped responding' ELSE error END, "
             "finished_at = CASE WHEN attempts >= max_attempts THEN ? ELSE NULL END "
             "WHERE status = 'running' AND heartbeat_at < datetime('now', ?)", (now(), f"-{STALE_MINUTES} minutes"))
-    job = query("SELECT * FROM jobs WHERE status = 'queued' AND run_after <= ? ORDER BY id LIMIT 1", (now(),), one=True)
+    if job_id:
+        job = query("SELECT * FROM jobs WHERE id = ? AND status = 'queued'", (job_id,), one=True)
+    else:
+        job = query("SELECT * FROM jobs WHERE status = 'queued' AND run_after <= ? ORDER BY id LIMIT 1", (now(),), one=True)
     if not job:
         return None
     execute("UPDATE jobs SET status = 'running', attempts = attempts + 1, locked_by = ?, started_at = COALESCE(started_at, ?), "
@@ -105,8 +108,9 @@ def _claim():
     return claimed
 
 
-def run_one():
-    job = _claim()
+def run_one(job_id=None):
+    """Run the next due job, or (job_id) that one job right now, e.g. a small import straight after upload."""
+    job = _claim(job_id)
     if not job:
         return False
     ctx = Context(job)

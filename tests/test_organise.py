@@ -55,6 +55,28 @@ class OrganiseContacts(AppCase):
         self.assertEqual(scalar("SELECT COUNT(*) FROM contacts"), 0)
         self.assertEqual(scalar("SELECT COUNT(*) FROM suppressions"), 1, "unsubscribed people stay protected")
 
+    def test_one_click_delete_buttons(self):
+        from gm.db import scalar
+        self.import_file(["a@good.test", "b@good.test"])
+        self.contact("mine@good.test")
+        page = self.client.get("/contacts/").get_data(as_text=True)
+        self.assertIn("Delete all imported", page)
+        self.assertIn('name="confirm_text" value="DELETE"', page)
+        self.post("/contacts/imports/delete-all")
+        self.assertEqual(scalar("SELECT email FROM contacts"), "mine@good.test", "hand-added contacts stay")
+        self.post("/contacts/delete-all", {"confirm_text": "DELETE"})
+        self.assertEqual(scalar("SELECT COUNT(*) FROM contacts"), 0)
+
+    def test_small_import_finishes_without_waiting_for_the_worker(self):
+        from gm.db import scalar
+        data = b"email\nnow1@good.test\nnow2@good.test\n"
+        r = self.post("/contacts/import", {"file": (io.BytesIO(data), "now.csv")}, content_type="multipart/form-data")
+        imp = int(r.headers["Location"].split("/")[-2])
+        self.post(f"/contacts/import/{imp}/map", {"col_0": "email", "recipient_type": "business",
+                                                  "lawful_basis": "legitimate_interest"})
+        self.assertEqual(scalar("SELECT status FROM imports WHERE id = ?", (imp,)), "completed")
+        self.assertEqual(scalar("SELECT COUNT(*) FROM contacts"), 2)
+
     def test_bulk_action_on_all_matching(self):
         import json
         from gm.db import scalar

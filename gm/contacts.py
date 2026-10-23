@@ -189,8 +189,9 @@ def index():
     files = query("SELECT i.id, i.filename, i.created_at, COUNT(c.id) AS n FROM imports i JOIN contacts c ON c.import_id = i.id "
                   "WHERE i.workspace_id = ? GROUP BY i.id ORDER BY i.id DESC LIMIT 20", (wid,))
     everyone = scalar("SELECT COUNT(*) FROM contacts WHERE workspace_id = ?", (wid,))
+    imported = scalar("SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND import_id IS NOT NULL", (wid,))
     return render_template("contacts/list.html", contacts=rows, total=total, page=page, pages=max(1, -(-total // PAGE_SIZE)),
-                           groups=groups, files=files, everyone=everyone,
+                           groups=groups, files=files, everyone=everyone, imported=imported,
                            filters=f, sort=sort, dir=direction.lower(), tags=tags_for([r["id"] for r in rows]),
                            all_tags=query("SELECT name FROM tags WHERE workspace_id = ? ORDER BY name", (wid,)),
                            any_contacts=scalar("SELECT 1 FROM contacts WHERE workspace_id = ? LIMIT 1", (wid,)))
@@ -430,10 +431,23 @@ def delete_import_contacts(import_id):
     return redirect(request.referrer or url_for("contacts.index"))
 
 
+@bp.route("/imports/delete-all", methods=["POST"])
+@require("delete_contacts")
+def delete_all_imported():
+    """Delete every contact that came from an imported file; contacts added by hand or found by search stay."""
+    wid = ws_id()
+    ids = [r["id"] for r in query("SELECT id FROM contacts WHERE workspace_id = ? AND import_id IS NOT NULL", (wid,))]
+    _delete_ids(wid, ids)
+    audit("contacts.imported_deleted", detail=f"{len(ids)} contacts")
+    flash(f"Deleted all {len(ids)} imported contacts. Your do-not-email list was kept.", "success")
+    return redirect(url_for("contacts.index"))
+
+
 @bp.route("/delete-all", methods=["POST"])
 @require("delete_contacts")
 def delete_all():
-    """Delete every contact in the workspace. Typing DELETE is required. Do-not-email entries are kept."""
+    """Delete every contact in the workspace (the button sends confirm_text=DELETE after a confirm dialog).
+    Do-not-email entries are kept."""
     wid = ws_id()
     if request.form.get("confirm_text", "").strip().upper() != "DELETE":
         flash("Type DELETE in the box to confirm deleting all contacts.", "error")
@@ -598,6 +612,8 @@ def import_map(import_id):
         execute("UPDATE imports SET mapping = ?, options = ?, status = 'queued', job_id = ? WHERE id = ?",
                 (json.dumps(mapping), json.dumps(options), job, import_id))
         audit("import.started", target=imp["filename"], detail=f"{imp['total_rows']} rows")
+        if not options["dns"] and imp["total_rows"] <= IMPORT_NOW_ROWS:
+            jobs.run_one(job)  # a few seconds; bigger files and DNS checks go to the background worker
         return redirect(url_for("contacts.import_status", import_id=import_id))
     rows = read_csv(os.path.join(current_app.config["IMPORT_DIR"], imp["stored_name"]), limit=8)[1:]
     return render_template("contacts/import_map.html", imp=imp, headers=headers, mapping=json.loads(imp["mapping"]),
@@ -645,10 +661,27 @@ def _run_import(ctx):
         execute("INSERT INTO import_issues (import_id, row_number, email, outcome, detail) VALUES (?, ?, ?, ?, ?)",
                 (imp["id"], n, email[:254], outcome, detail[:300]))
 
-    for n, row in enumerate(rows, start=2):
-        if n % 200 == 0:
-            ctx.check_cancel()
-            ctx.progress(n - 2, len(rows), f"Processed {n - 2:,} of {len(rows):,} rows")
+    # Rows are saved 500 at a time in one transaction: one disk write per batch instead of several per row.
+    # With DNS checks each row waits on the network, so batches are small to avoid holding the write lock.
+    size = 25 if opts.get("dns") else IMPORT_BATCH
+    for start in range(0, len(rows), size):
+        ctx.check_cancel()
+        ctx.progress(start, len(rows), f"Processed {start:,} of {len(rows):,} rows")
+        with transaction():
+            _import_batch(imp, wid, opts, mapping, rows[start:start + size], start + 2, counts, seen, issue)
+    execute("UPDATE imports SET status = 'completed', completed_at = ?, accepted = ?, rejected = ?, duplicates = ?, invalid = ?, "
+            "suppressed = ?, review = ? WHERE id = ?", (now(), counts["accepted"], counts["rejected"], counts["duplicates"],
+                                                       counts["invalid"], counts["suppressed"], counts["review"], imp["id"]))
+    ctx.progress(len(rows), len(rows), "Import finished")
+    return counts
+
+
+IMPORT_BATCH = 500
+IMPORT_NOW_ROWS = 20000   # files up to this size are imported during the upload request (about 10 seconds)
+
+
+def _import_batch(imp, wid, opts, mapping, batch, first_row, counts, seen, issue):
+    for n, row in enumerate(batch, start=first_row):
         data = {field: (row[idx].strip() if idx < len(row) else "") for idx, field in mapping.items()}
         email = data.get("email", "")
         if not any(cell.strip() for cell in row):
@@ -705,11 +738,6 @@ def _run_import(ctx):
             issue(n, email, "review", "; ".join(reasons))
         else:
             counts["accepted"] += 1
-    execute("UPDATE imports SET status = 'completed', completed_at = ?, accepted = ?, rejected = ?, duplicates = ?, invalid = ?, "
-            "suppressed = ?, review = ? WHERE id = ?", (now(), counts["accepted"], counts["rejected"], counts["duplicates"],
-                                                       counts["invalid"], counts["suppressed"], counts["review"], imp["id"]))
-    ctx.progress(len(rows), len(rows), "Import finished")
-    return counts
 
 
 @bp.route("/import/<int:import_id>/cancel", methods=["POST"])

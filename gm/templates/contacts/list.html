@@ -6,6 +6,10 @@
   <div class="actions">
     {% if can('export_contacts') %}<a class="btn" href="{{ url_for('contacts.export', **filters) }}">Export CSV</a>{% endif %}
     {% if can('edit_contacts') %}<a class="btn primary" href="{{ url_for('contacts.new') }}">Add contact</a>{% endif %}
+    {% if can('delete_contacts') and everyone %}
+    {% if imported %}<form method="post" action="{{ url_for('contacts.delete_all_imported') }}" class="inline" data-confirm="Delete all {{ '{:,}'.format(imported) }} contacts that came from imported files? Contacts you added yourself stay. Your do-not-email list is kept.">{{ csrf() }}<button class="btn danger" type="submit">🗑 Delete all imported</button></form>{% endif %}
+    <form method="post" action="{{ url_for('contacts.delete_all') }}" class="inline" data-confirm="Delete ALL {{ '{:,}'.format(everyone) }} contacts? This can't be undone. Your do-not-email list is kept so people who opted out stay protected.">{{ csrf() }}<input type="hidden" name="confirm_text" value="DELETE"><button class="btn danger" type="submit">🗑 Delete all contacts</button></form>
+    {% endif %}
   </div>
 </div>
 {% if not any_contacts %}
@@ -72,13 +76,5 @@
     </tbody></table></div>
 </form>
 {{ pager(page, pages, 'contacts.index', dict(filters, sort=sort, dir=dir)) }}
-{% if can('delete_contacts') %}
-<details class="card more danger-zone mt"><summary>Delete all contacts</summary>
-  <form method="post" action="{{ url_for('contacts.delete_all') }}" class="actions">{{ csrf() }}
-    <span>This deletes all {{ everyone }} contacts. Your do-not-email list is kept. Type <strong>DELETE</strong> to confirm:</span>
-    <input type="text" name="confirm_text" style="max-width:140px" autocomplete="off" aria-label="Type DELETE to confirm">
-    <button class="btn danger" type="submit">Delete all contacts</button></form>
-</details>
-{% endif %}
 {% endif %}
 {% endblock %}

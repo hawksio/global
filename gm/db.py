@@ -494,10 +494,18 @@ ALTER TABLE campaign_recipients ADD COLUMN wait_reason TEXT NOT NULL DEFAULT '';
 ALTER TABLE campaign_recipients ADD COLUMN ignore_gap INTEGER NOT NULL DEFAULT 0;
 """
 
+M4_FAST_DELETE = """
+-- Deleting contacts cascades to campaign_recipients; without this index every deleted contact scans
+-- the whole table. The import index makes "delete this import" and the per-file counts instant.
+CREATE INDEX IF NOT EXISTS ix_recipients_contact ON campaign_recipients(contact_id);
+CREATE INDEX IF NOT EXISTS ix_contacts_ws_import ON contacts(workspace_id, import_id);
+"""
+
 MIGRATIONS = [
     (1, "initial schema", M1_INITIAL),
     (2, "campaign email style", M2_PLAIN_STYLE),
     (3, "recipient wait reason", M3_WAIT_REASON),
+    (4, "indexes for fast delete", M4_FAST_DELETE),
 ]
 
 _migrate_lock = threading.Lock()
