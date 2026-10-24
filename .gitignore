@@ -31,3 +31,4 @@ Thumbs.db
 # Per-server setup files
 setup_cpanel.log
 setup_cpanel.txt
+tmp/

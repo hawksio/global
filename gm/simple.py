@@ -42,8 +42,25 @@ NO_PERMISSION_SQL = ("sandbox = 0 AND status = 'active' AND lawful_basis != 'con
                      "(lawful_basis = 'unknown' OR recipient_type IN ('unknown', 'consumer'))")
 
 
+FIELD_ALIASES = {"name": "first_name|there", "firstname": "first_name|there", "first": "first_name|there",
+                 "fname": "first_name|there", "first_name": "first_name|there", "lastname": "last_name",
+                 "surname": "last_name", "companyname": "company", "company_name": "company", "business": "company",
+                 "organisation": "company", "organization": "company", "title": "job_title", "jobtitle": "job_title"}
+
+
+def fix_fields(text):
+    """{{name}} -> {{first_name|there}} and similar; anything still unknown is removed, so a typo never blocks a send."""
+    def repl(m):
+        key = m.group(1)
+        if key in render.FIELDS:
+            return m.group(0)
+        alias = FIELD_ALIASES.get(key.lower())
+        return "{{" + alias + "}}" if alias else ""
+    return render.TOKEN.sub(repl, text or "")
+
+
 def _ready_count(wid, tag=None):
-    seg = {"verification_status": READY_STATUSES, "status": ["active"], "exclude_sandbox": True}
+    seg = {"verification_status": READY_STATUSES, "status": ["active"], "exclude_sandbox": True, "compose": True}
     if tag:
         seg["tag"] = tag
     return len(segment_report(wid, seg)["eligible"])
@@ -168,7 +185,6 @@ def compose():
         current = workspace()
         tags = [dict(name=t["name"], n=_ready_count(wid, t["name"]))
                 for t in query("SELECT name FROM tags WHERE workspace_id = ? AND name NOT LIKE 'compose-%' ORDER BY name", (wid,))]
-        no_permission = scalar(f"SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND {NO_PERMISSION_SQL}", (wid,))
         ready_all = _ready_count(wid)
         everyone = scalar("SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND sandbox = 0", (wid,))
         left_out = {}
@@ -177,7 +193,7 @@ def compose():
         importing = scalar("SELECT COALESCE(SUM(total_rows), 0) FROM imports WHERE workspace_id = ? AND status IN "
                            "('queued', 'processing')", (wid,))
         return render_template("simple/compose.html", form=form, tags=tags, problems=list(problems), ws=current, SPEEDS=SPEEDS,
-                               ready_all=ready_all, draft=draft, no_permission=no_permission, hints=hints,
+                               ready_all=ready_all, draft=draft, hints=hints,
                                left_out=left_out, importing=importing, everyone=everyone), code
 
     if request.method != "POST":
@@ -213,15 +229,13 @@ def compose():
 
     problems = []
     if not form["from_name"].strip():
-        problems.append("Add your name in From (people see it in their inbox).")
+        form["from_name"] = ws["sender_name"] or ws["company_name"] or user["full_name"] or ws["name"]
     if not subject:
         problems.append("Add a subject.")
     if not body:
         problems.append("Write your message.")
-    bad = render.unknown_fields(subject, body, form["follow_body"] if form["follow_up"] else "")
-    if bad:
-        problems.append("These names in {{ }} aren't recognised: " + ", ".join(bad) +
-                        ". Use the “Insert first name” button instead.")
+    subject, body = fix_fields(subject), fix_fields(body)
+    form["subject"], form["body"], form["follow_body"] = subject, body, fix_fields(form["follow_body"])
     if not ws["sender_email"]:
         problems.append("Fill in the email address you send from (box at the top).")
     if problems:
@@ -243,8 +257,6 @@ def compose():
         addresses, invalid = _parse_addresses(form["pasted"])
         if not addresses:
             problems.append("Type or paste at least one email address.")
-        if not form["permission"] and not _already_ok(wid, addresses):
-            problems.append("Tick “These are business contacts I have a genuine reason to email” under the addresses.")
         if invalid:
             problems.append("These don't look like email addresses: " + ", ".join(invalid[:10]))
         if problems:
@@ -295,6 +307,13 @@ def compose():
     execute("UPDATE campaigns SET status = 'approved', approved_by = ?, approved_at = ? WHERE id = ?", (user["id"], now(), cid))
     audit("campaign.approved", target=cid, detail="sent from Compose")
     n = launch_campaign(query("SELECT * FROM campaigns WHERE id = ?", (cid,), one=True), workspace(), start_at)
+    # Sending from Compose is the sender's statement that these are business contacts: record it on the contacts,
+    # and send now even to people emailed recently (it's a new email they chose to write, not an automated repeat).
+    execute(f"UPDATE contacts SET lawful_basis = 'legitimate_interest', recipient_type = 'business', updated_at = ? "
+                     f"WHERE workspace_id = ? AND {NO_PERMISSION_SQL} AND id IN "
+                     "(SELECT contact_id FROM campaign_recipients WHERE campaign_id = ?)", (now(), wid, cid))
+    audit("contacts.confirmed_business", target=cid, detail="sent from Compose")
+    execute("UPDATE campaign_recipients SET ignore_gap = 1 WHERE campaign_id = ?", (cid,))
     audit("campaign.launched", target=cid, detail=f"{n} recipients, start {start_at} UTC")
     jobs.enqueue("send_campaigns", dedupe_key="send_campaigns")
     first = 0
@@ -316,22 +335,11 @@ def compose():
     return redirect(url_for("simple.sent_detail", campaign_id=cid))
 
 
-def _already_ok(wid, addresses):
-    """True when every typed address is a teammate or a contact already confirmed as a business contact."""
-    for email in addresses:
-        e = email.strip().lower()
-        if not (scalar("SELECT 1 FROM users WHERE workspace_id = ? AND lower(email) = ?", (wid, e)) or
-                scalar("SELECT 1 FROM contacts WHERE workspace_id = ? AND email_normalized = ? AND recipient_type = 'business' "
-                       "AND lawful_basis IN ('legitimate_interest', 'consent', 'contract')", (wid, e))):
-            return False
-    return True
-
-
 def _save_draft(ws, user, form, draft):
     """Create or update the draft behind this Compose page. Returns its id."""
     subject = form["subject"].strip()[:200] or "(no subject)"
     body = form["body"].strip()
-    segment = {"verification_status": READY_STATUSES, "status": ["active"], "exclude_sandbox": True,
+    segment = {"verification_status": READY_STATUSES, "status": ["active"], "exclude_sandbox": True, "compose": True,
                "_to_mode": form["to_mode"], "_pasted": form["pasted"][:20000] if form["to_mode"] == "paste" else ""}
     if form["to_mode"].startswith("tag:"):
         segment["tag"] = form["to_mode"][4:]

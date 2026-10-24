@@ -37,19 +37,37 @@ class Compose(AppCase):
         page = self.client.get("/sent").get_data(as_text=True)
         self.assertIn("Quick question", page)
 
-    def test_pasted_addresses_need_permission_tick(self):
-        from gm.db import scalar
+    def test_typed_addresses_send_without_any_tick_box(self):
+        from gm.db import query
+        page = self.client.get("/compose").get_data(as_text=True)
+        self.assertNotIn('name="permission"', page)
+        self.assertIn("Sending confirms these are business contacts", page)
         r = self.send(to_mode="paste", pasted="ann@good.test")
-        self.assertEqual(r.status_code, 400)
-        self.assertIn("genuine reason", r.get_data(as_text=True))
-        self.assertEqual(scalar("SELECT COUNT(*) FROM campaigns"), 0)
+        self.assertEqual(r.status_code, 302)
+        c = query("SELECT * FROM contacts WHERE email_normalized = 'ann@good.test'", one=True)
+        self.assertEqual((c["lawful_basis"], c["recipient_type"]), ("legitimate_interest", "business"))
 
-    def test_business_tick_is_remembered_and_skipped_for_known_contacts(self):
-        self.contact("known@good.test")
-        r = self.send(to_mode="paste", pasted="known@good.test")
-        self.assertEqual(r.status_code, 302, "already a business contact: no tick needed")
-        self.assertIn('name="permission" checked', self.client.get("/compose").get_data(as_text=True),
-                      "the box starts ticked")
+    def test_contacts_with_any_permission_record_are_included_and_recorded_as_business(self):
+        from gm.db import query, scalar
+        self.contact("unknown@good.test", lawful_basis="unknown", recipient_type="unknown")
+        self.contact("private@good.test", recipient_type="consumer", lawful_basis="legitimate_interest")
+        self.contact("gone@good.test")
+        from gm.suppression import add_suppression
+        add_suppression(self.ws_id, "gone@good.test", "unsubscribe")
+        self.assertIn("Everyone in my contacts (2)", self.client.get("/compose").get_data(as_text=True),
+                      "opted-out people are still skipped")
+        self.assertEqual(self.send().status_code, 302)
+        self.assertEqual(scalar("SELECT COUNT(*) FROM campaign_recipients"), 2)
+        self.assertEqual({r["recipient_type"] for r in query("SELECT recipient_type FROM contacts WHERE email != 'gone@good.test'")},
+                         {"business"})
+
+    def test_unknown_fields_are_fixed_not_blocked(self):
+        from gm.db import query
+        self.contact("ann@good.test")
+        r = self.send(body="Hi {{name}}, about {{companyname}} {{whatever}}.")
+        self.assertEqual(r.status_code, 302)
+        body = query("SELECT text_body FROM campaign_steps", one=True)["text_body"]
+        self.assertEqual(body, "Hi {{first_name|there}}, about {{company}} .")
 
     def test_real_send_is_plain_personal_style(self):
         live(self)
@@ -210,7 +228,6 @@ class EasierBasics(AppCase):
     def test_one_click_fix_for_contacts_without_permission(self):
         from gm.db import query
         self.contact("old@good.test", lawful_basis="unknown")
-        self.assertIn("can't be emailed yet", self.client.get("/compose").get_data(as_text=True))
         self.post("/compose/mark-business")
         self.assertEqual(query("SELECT lawful_basis FROM contacts", one=True)["lawful_basis"], "legitimate_interest")
 
@@ -236,27 +253,37 @@ class Waiting(AppCase):
         super().setUp()
         self.login()
 
-    def test_recently_emailed_person_is_held_with_a_reason_and_can_be_sent_anyway(self):
-        from gm.db import execute, query
+    def test_recently_emailed_person_still_gets_a_new_compose_email(self):
+        from gm.db import execute
         from tests_live import live_mode
         live_mode(self)
         cid_contact = self.contact("ann@good.test")
         execute("UPDATE contacts SET last_contacted_at = datetime('now', '-2 hours') WHERE id = ?", (cid_contact,))
-        r = self.post("/compose", {"to_mode": "all", "subject": "Again", "body": "Hi {{first_name|there}}",
-                                   "from_name": "Olive", "action": "send"})
-        self.assertEqual(self.provider.sent, [], "held by the minimum-gap rule")
-        page = self.client.get(r.headers["Location"]).get_data(as_text=True)
-        self.assertIn("emailed in the last 72 hours", page)
-        self.assertIn("Already emailed at", page)
-        self.assertIn("Send now anyway", page)
+        self.post("/compose", {"to_mode": "all", "subject": "Again", "body": "Hi {{first_name|there}}",
+                               "from_name": "Olive", "action": "send"})
+        self.assertEqual(len(self.provider.sent), 1, "a new email written in Compose isn't held by the gap rule")
+
+    def test_send_now_anyway_for_a_held_follow_up(self):
+        from gm.db import execute, query
+        from tests_live import live_mode
+        live_mode(self)
+        self.contact("ann@good.test")
+        self.post("/compose", {"to_mode": "all", "subject": "Hi", "body": "Hi", "from_name": "Olive", "action": "send"})
         camp = query("SELECT id FROM campaigns", one=True)["id"]
         rid = query("SELECT id FROM campaign_recipients", one=True)["id"]
+        execute("UPDATE campaign_recipients SET status = 'active', next_send_at = datetime('now', '+1 day'), "
+                "wait_reason = 'Already emailed' WHERE id = ?", (rid,))
+        execute("INSERT INTO campaign_steps (campaign_id, step_no, delay_days, subject, html_body, text_body) "
+                "VALUES (?, 1, 3, 'Hi', '<p>Again</p>', 'Again')", (camp,))
+        execute("UPDATE campaign_recipients SET next_step = 1 WHERE id = ?", (rid,))
+        execute("UPDATE campaigns SET status = 'sending' WHERE id = ?", (camp,))
         self.post(f"/sent/{camp}/people/{rid}/now")
-        self.assertEqual(len(self.provider.sent), 1)
+        self.assertEqual(len(self.provider.sent), 2)
         self.assertEqual(query("SELECT wait_reason FROM campaign_recipients", one=True)["wait_reason"], "")
 
-    def test_from_name_is_required(self):
-        r = self.post("/compose", {"to_mode": "paste", "pasted": "a@good.test", "permission": "on", "subject": "Hi",
+    def test_empty_from_name_uses_your_details(self):
+        from gm.db import query
+        r = self.post("/compose", {"to_mode": "paste", "pasted": "a@good.test", "subject": "Hi",
                                    "body": "Hello", "from_name": "", "action": "send"})
-        self.assertEqual(r.status_code, 400)
-        self.assertIn("Add your name in From", r.get_data(as_text=True))
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(query("SELECT from_name FROM campaigns", one=True)["from_name"])

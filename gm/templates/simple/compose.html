@@ -1,19 +1,11 @@
 {% extends "base.html" %}{% from "_ui.html" import csrf %}
 {% block title %}{{ 'Draft' if draft else 'New email' }}{% endblock %}
 {% block content %}
-{% if no_permission and can('edit_contacts') %}
-<form method="post" action="{{ url_for('simple.mark_business') }}" class="notice info" style="max-width:860px"
-      data-confirm="Mark {{ no_permission }} contacts as business contacts you have a reason to email?">{{ csrf() }}
-  {{ no_permission }} of your contacts can't be emailed yet because nobody recorded that you may email them.
-  <button class="btn small" type="submit">They're business contacts: let me email them</button>
-</form>
-{% endif %}
-
 {% if importing %}<div class="notice info" style="max-width:860px">Your upload of {{ '{:,}'.format(importing) }} rows is still being imported. Those contacts appear here when it finishes (usually within a minute or two).</div>{% endif %}
 {% if left_out %}<details class="notice warn" style="max-width:860px"{% if not ready_all %} open{% endif %}>
-  <summary>{{ '{:,}'.format(ready_all) }} of your {{ '{:,}'.format(everyone) }} contacts can be emailed. Why are the others left out?</summary>
+  <summary>{{ '{:,}'.format(ready_all) }} of your {{ '{:,}'.format(everyone) }} contacts will get this. Why are the others skipped?</summary>
   <ul style="margin:6px 0 0">{% for why, n in left_out.items() %}<li>{{ '{:,}'.format(n) }}: {{ why }}</li>{% endfor %}</ul>
-  <p class="muted"><small>Bad, risky and opted-out addresses are left out to protect your sender reputation. You can see them under Contacts → Clean up list.</small></p>
+  <p class="muted"><small>Addresses that would bounce, disposable addresses and people who asked not to be emailed are skipped automatically to protect your sender reputation. Everyone else gets your email.</small></p>
 </details>{% endif %}
 
 <form method="post" class="compose" data-warn-unsaved action="{{ url_for('simple.compose') }}">{{ csrf() }}
@@ -43,7 +35,6 @@
   </div>
   <div class="compose-paste" data-show-when="paste">
     <textarea name="pasted" rows="2" placeholder="name@company.com, another@company.com">{{ form.pasted }}</textarea>
-    <label class="check{% if problems and not form.permission %} needs-tick{% endif %}"><input type="checkbox" name="permission" {% if form.permission %}checked{% endif %}> <span>These are business contacts I have a genuine reason to email.</span></label>
   </div>
   <div class="compose-row"><label for="from_name">From</label>
     <input id="from_name" type="text" name="from_name" value="{{ form.from_name }}" placeholder="Your name">
@@ -64,6 +55,7 @@
 
   <div class="compose-row"><label for="speed">Speed</label>
     <select id="speed" name="speed">{% for k, v in SPEEDS.items() %}<option value="{{ k }}" {% if form.speed == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+  <p class="muted compose-note"><small>Sending confirms these are business contacts you have a genuine reason to email. People who opted out and addresses that would bounce are skipped automatically.</small></p>
   <div class="compose-actions">
     <button class="btn primary send-btn" type="submit" name="action" value="send"
       data-confirm="Send this email now?">Send</button>

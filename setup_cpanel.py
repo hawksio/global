@@ -17,6 +17,7 @@ What it does:
   4. prints the cron command for the background sender.
 """
 import os
+import time
 import secrets
 import sys
 
@@ -133,7 +134,16 @@ def main():
     venv = os.path.dirname(os.path.dirname(sys.executable))
     print("4. Add this in cPanel > Cron Jobs (Once Per Minute) so campaigns are sent:")
     print(f"   cd {ROOT} && {os.path.join(venv, 'bin', 'flask')} --app gm worker --once --budget 50 >> {data_dir}/worker.log 2>&1")
-    print("Done. Click RESTART on the Python app page.")
+    # Passenger restarts the app when tmp/restart.txt changes, so the new files are live without clicking Restart.
+    os.makedirs(os.path.join(ROOT, "tmp"), exist_ok=True)
+    with open(os.path.join(ROOT, "tmp", "restart.txt"), "w") as fh:
+        fh.write(str(time.time()))
+    try:
+        version = open(os.path.join(ROOT, "gm", "VERSION"), encoding="utf-8").read().strip()
+    except OSError:
+        version = "unknown"
+    print(f"5. App restarted with version {version}. Check https://{domain}/healthz shows the same version.")
+    print("Done. (If the site still shows the old version, click RESTART on the Python app page.)")
     return 0
 
 

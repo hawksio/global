@@ -37,8 +37,11 @@ MIN_READINESS_SCORE = 60
 
 
 # ---------------------------------------------------------------- eligibility
-def eligibility(contact, include_risky=False):
-    """(eligible, reason). The rules that decide whether a contact may receive marketing email at all."""
+def eligibility(contact, include_risky=False, business_ok=False):
+    """(eligible, reason). The rules that decide whether a contact may receive marketing email at all.
+    business_ok: sent from Compose, where sending is the sender's own statement that these are business contacts
+    they have a reason to email, so a missing permission record doesn't hold anyone back. Opt-outs, bad or risky
+    addresses and disposable domains are always left out."""
     if contact["status"] != "active":
         return False, f"Status is {contact['status']}"
     if contact["marketing_opt_out"]:
@@ -47,11 +50,13 @@ def eligibility(contact, include_risky=False):
         return False, f"Address is {contact['verification_status']}"
     if contact["verification_status"] == "risky" and not include_risky:
         return False, "Address is risky (review it or include risky addresses deliberately)"
-    if contact["lawful_basis"] == "unknown":
+    if business_ok:
+        pass
+    elif contact["lawful_basis"] == "unknown":
         return False, "No permission to email recorded"
-    if contact["recipient_type"] == "consumer" and contact["lawful_basis"] != "consent":
+    elif contact["recipient_type"] == "consumer" and contact["lawful_basis"] != "consent":
         return False, "Consumer address without recorded consent"
-    if contact["recipient_type"] == "unknown" and contact["lawful_basis"] == "legitimate_interest":
+    elif contact["recipient_type"] == "unknown" and contact["lawful_basis"] == "legitimate_interest":
         return False, "Legitimate interest claimed but recipient type unknown"
     if contact["is_disposable"]:
         return False, "Disposable email domain"
@@ -69,7 +74,7 @@ def segment_report(workspace_id, segment):
                                                        (workspace_id,))}
     eligible, reasons, sources = [], {}, {}
     for c in rows:
-        ok, why = eligibility(c, segment.get("include_risky"))
+        ok, why = eligibility(c, segment.get("include_risky"), segment.get("compose"))
         if ok and c["email_normalized"] in suppressed:
             ok, why = False, "On the suppression list"
         if ok:
@@ -310,7 +315,9 @@ def readiness(ws, c):
     for s in steps:
         errors += [f"{'Email 1' if s['step_no'] == 0 else 'Follow-up ' + str(s['step_no'])}: {f['title']}"
                    for f in content_check(s["subject"], s["html_body"], s["text_body"]) if f["level"] == "error"]
-    add("5. Email passes the automatic checks", not errors, "; ".join(errors) or "No blocking problems found.")
+    plain = c["style"] == "plain"  # Compose: content and domain checks are warnings, never blocks
+    add("5. Email passes the automatic checks", not errors, "; ".join(errors) or "No blocking problems found.",
+        blocking=not plain)
     add("6. AI-generated content reviewed by a person", not c["ai_generated"] or c["content_reviewed"],
         "Tick the review box on this page after reading every email." if c["ai_generated"] and not c["content_reviewed"]
         else "Reviewed." if c["ai_generated"] else "Not AI-generated.")
@@ -328,7 +335,7 @@ def readiness(ws, c):
         ok = check and check["score"] >= MIN_READINESS_SCORE and check["results"].get("dkim", {}).get("status") == "pass"
         add("9. Sending domain ready", ok,
             f"Readiness score {check['score']}/100 (checked {check['checked_at']} UTC)." if check else
-            f"Run the Deliverability Centre checks for {domain or 'your domain'} first.")
+            f"Run the Deliverability Centre checks for {domain or 'your domain'} first.", blocking=not plain)
     else:
         add("9. Sending domain ready", True, "Not needed for a practice run.", blocking=False)
     add("10. Sending isn't paused", not ws["sending_paused_reason"],
@@ -760,7 +767,8 @@ def _precheck(c, ws, recipient):
     if query("SELECT 1 FROM suppressions WHERE workspace_id = ? AND email_normalized = ?", (ws["id"], contact["email_normalized"]),
              one=True):
         return None, "Suppressed"
-    ok, why = eligibility(contact, json.loads(c["segment"]).get("include_risky"))
+    seg = json.loads(c["segment"])
+    ok, why = eligibility(contact, seg.get("include_risky"), seg.get("compose"))
     return (contact, None) if ok else (None, why)
 
 
