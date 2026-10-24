@@ -9,6 +9,13 @@
 </form>
 {% endif %}
 
+{% if importing %}<div class="notice info" style="max-width:860px">Your upload of {{ '{:,}'.format(importing) }} rows is still being imported. Those contacts appear here when it finishes (usually within a minute or two).</div>{% endif %}
+{% if left_out %}<details class="notice warn" style="max-width:860px"{% if not ready_all %} open{% endif %}>
+  <summary>{{ '{:,}'.format(ready_all) }} of your {{ '{:,}'.format(everyone) }} contacts can be emailed. Why are the others left out?</summary>
+  <ul style="margin:6px 0 0">{% for why, n in left_out.items() %}<li>{{ '{:,}'.format(n) }}: {{ why }}</li>{% endfor %}</ul>
+  <p class="muted"><small>Bad, risky and opted-out addresses are left out to protect your sender reputation. You can see them under Contacts → Clean up list.</small></p>
+</details>{% endif %}
+
 <form method="post" class="compose" data-warn-unsaved action="{{ url_for('simple.compose') }}">{{ csrf() }}
   {% if draft %}<input type="hidden" name="draft_id" value="{{ draft.id }}">{% endif %}
   <div class="compose-head">{{ 'Draft' if draft else 'New email' }}{% if ws.sandbox_mode %} <span class="badge sim">Practice mode: nothing is really sent</span>{% endif %}</div>

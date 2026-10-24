@@ -36,6 +36,12 @@ def text_to_html(text):
     return "\n".join("<p>" + html.escape(p).replace("\n", "<br>") + "</p>" for p in paragraphs)
 
 
+# Active contacts that can't be emailed only because no business reason was recorded (unknown permission,
+# unknown type, or marked as private people without consent). "They're business contacts" fixes these in one click.
+NO_PERMISSION_SQL = ("sandbox = 0 AND status = 'active' AND lawful_basis != 'consent' AND "
+                     "(lawful_basis = 'unknown' OR recipient_type IN ('unknown', 'consumer'))")
+
+
 def _ready_count(wid, tag=None):
     seg = {"verification_status": READY_STATUSES, "status": ["active"], "exclude_sandbox": True}
     if tag:
@@ -162,10 +168,17 @@ def compose():
         current = workspace()
         tags = [dict(name=t["name"], n=_ready_count(wid, t["name"]))
                 for t in query("SELECT name FROM tags WHERE workspace_id = ? AND name NOT LIKE 'compose-%' ORDER BY name", (wid,))]
-        no_permission = scalar("SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND sandbox = 0 AND status = 'active' "
-                               "AND lawful_basis = 'unknown'", (wid,))
+        no_permission = scalar(f"SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND {NO_PERMISSION_SQL}", (wid,))
+        ready_all = _ready_count(wid)
+        everyone = scalar("SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND sandbox = 0", (wid,))
+        left_out = {}
+        if ready_all < everyone:  # say exactly why some contacts aren't in "Everyone in my contacts"
+            left_out = dict(sorted(segment_report(wid, {"exclude_sandbox": True})["excluded"].items(), key=lambda kv: -kv[1]))
+        importing = scalar("SELECT COALESCE(SUM(total_rows), 0) FROM imports WHERE workspace_id = ? AND status IN "
+                           "('queued', 'processing')", (wid,))
         return render_template("simple/compose.html", form=form, tags=tags, problems=list(problems), ws=current, SPEEDS=SPEEDS,
-                               ready_all=_ready_count(wid), draft=draft, no_permission=no_permission, hints=hints), code
+                               ready_all=ready_all, draft=draft, no_permission=no_permission, hints=hints,
+                               left_out=left_out, importing=importing, everyone=everyone), code
 
     if request.method != "POST":
         return page()
@@ -361,11 +374,9 @@ def delete_draft(campaign_id):
 def mark_business():
     """One click for contacts added without a recorded permission: confirm they're business contacts."""
     wid = ws_id()
-    n = scalar("SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND sandbox = 0 AND status = 'active' "
-               "AND lawful_basis = 'unknown'", (wid,))
-    execute("UPDATE contacts SET lawful_basis = 'legitimate_interest', recipient_type = CASE WHEN recipient_type = 'unknown' "
-            "THEN 'business' ELSE recipient_type END, updated_at = ? WHERE workspace_id = ? AND sandbox = 0 AND status = 'active' "
-            "AND lawful_basis = 'unknown'", (now(), wid))
+    n = scalar(f"SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND {NO_PERMISSION_SQL}", (wid,))
+    execute("UPDATE contacts SET lawful_basis = 'legitimate_interest', recipient_type = 'business', updated_at = ? "
+            f"WHERE workspace_id = ? AND {NO_PERMISSION_SQL}", (now(), wid))
     audit("contacts.marked_business", detail=f"{n} contacts", workspace_id=wid)
     flash(f"{n} contacts marked as business contacts you can email.", "success")
     return redirect(request.referrer or url_for("simple.compose"))

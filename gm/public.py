@@ -56,4 +56,14 @@ def healthz():
     stuck = query("SELECT COUNT(*) AS n FROM jobs WHERE status = 'queued' AND run_after < datetime('now', '-15 minutes')", one=True)
     checks["worker"] = "ok" if not stuck["n"] else "behind (is the cron job running?)"
     ok = checks["database"] == "ok" and checks["storage_writable"] == "ok"
-    return jsonify({"status": "ok" if ok else "error", "time": now(), "checks": checks}), 200 if ok else 503
+    return jsonify({"status": "ok" if ok else "error", "time": now(), "version": app_version(), "checks": checks}),         200 if ok else 503
+
+
+def app_version():
+    """The commit the uploaded files came from (git archive fills in gm/VERSION); "dev" in a git checkout."""
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "VERSION"), encoding="utf-8") as fh:
+            v = fh.read().strip()
+    except OSError:
+        return "unknown"
+    return "dev" if v.startswith("$") else v

@@ -88,6 +88,21 @@ class OrganiseContacts(AppCase):
         self.assertEqual(r.status_code, 302)
         self.assertEqual(scalar("SELECT COUNT(*) FROM campaign_recipients"), 2)
 
+    def test_compose_explains_left_out_contacts_and_fixes_permission_in_one_click(self):
+        from gm.db import scalar
+        self.contact("ok@good.test")
+        self.contact("private@good.test", recipient_type="consumer", lawful_basis="legitimate_interest")
+        page = self.client.get("/compose").get_data(as_text=True)
+        self.assertIn("1 of your 2 contacts can be emailed", page)
+        self.assertIn("Consumer address without recorded consent", page)
+        self.assertIn("1 of your contacts can't be emailed yet", page)
+        self.post("/compose/mark-business")
+        self.assertEqual(scalar("SELECT recipient_type FROM contacts WHERE email = 'private@good.test'"), "business")
+        self.assertIn("Everyone in my contacts (2)", self.client.get("/compose").get_data(as_text=True))
+
+    def test_health_shows_version(self):
+        self.assertEqual(self.client.get("/healthz").get_json()["version"], "dev")
+
     def test_bulk_action_on_all_matching(self):
         import json
         from gm.db import scalar
