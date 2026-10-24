@@ -17,6 +17,7 @@ from .campaigns import launch_campaign, readiness, segment_report, steps_of
 from .contacts import apply_tags, create_contact
 from .db import execute, now, query, scalar, transaction
 from .security import audit, can, current_user, require, workspace, ws_id
+from .suppression import remove_suppression
 
 bp = Blueprint("simple", __name__)
 
@@ -57,6 +58,19 @@ def fix_fields(text):
         alias = FIELD_ALIASES.get(key.lower())
         return "{{" + alias + "}}" if alias else ""
     return render.TOKEN.sub(repl, text or "")
+
+
+def _blocked_typed(wid, pasted):
+    """Typed addresses that are on the do-not-email list, with a readable reason."""
+    from .suppression import REASONS
+    addresses, _ = _parse_addresses(pasted or "")
+    out = []
+    for email in addresses[:200]:
+        row = query("SELECT * FROM suppressions WHERE workspace_id = ? AND email_normalized = ?", (wid, email), one=True)
+        if row:
+            out.append(dict(row, label=REASONS.get(row["reason"], row["reason"]) + (f": {row['source']}" if row["source"] else ""),
+                            when=row["created_at"][:10]))
+    return out
 
 
 def _ready_count(wid, tag=None):
@@ -190,16 +204,24 @@ def compose():
         left_out = {}
         if ready_all < everyone:  # say exactly why some contacts aren't in "Everyone in my contacts"
             left_out = dict(sorted(segment_report(wid, {"exclude_sandbox": True})["excluded"].items(), key=lambda kv: -kv[1]))
+        blocked = _blocked_typed(wid, form["pasted"]) if form["to_mode"] == "paste" else []
         importing = scalar("SELECT COALESCE(SUM(total_rows), 0) FROM imports WHERE workspace_id = ? AND status IN "
                            "('queued', 'processing')", (wid,))
         return render_template("simple/compose.html", form=form, tags=tags, problems=list(problems), ws=current, SPEEDS=SPEEDS,
                                ready_all=ready_all, draft=draft, hints=hints,
-                               left_out=left_out, importing=importing, everyone=everyone), code
+                               left_out=left_out, importing=importing, everyone=everyone, blocked=blocked), code
 
     if request.method != "POST":
         return page()
 
     action = f.get("action", "send")
+    if action == "allow_send" and form["to_mode"] == "paste" and can("edit_contacts"):
+        for b in _blocked_typed(wid, form["pasted"]):
+            remove_suppression(wid, b["email_normalized"])
+            execute("UPDATE contacts SET marketing_opt_out = 0, updated_at = ? WHERE workspace_id = ? AND email_normalized = ?",
+                    (now(), wid, b["email_normalized"]))
+            audit("suppression.removed_from_compose", target=b["email_normalized"], detail=b["reason"])
+        action = "send"
 
     # --- details that may be missing from Settings can be filled in right here
     updates = {}
@@ -259,6 +281,10 @@ def compose():
             problems.append("Type or paste at least one email address.")
         if invalid:
             problems.append("These don't look like email addresses: " + ", ".join(invalid[:10]))
+        blocked = _blocked_typed(wid, form["pasted"])
+        if addresses and len(blocked) == len(addresses):
+            problems.append("Everyone you typed is on your do-not-email list. If that's a mistake (for example your own "
+                            "test address), click “Take off the list and send” below.")
         if problems:
             return page(problems, 400)
 

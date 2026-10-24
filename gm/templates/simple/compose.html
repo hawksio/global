@@ -5,7 +5,7 @@
 {% if left_out %}<details class="notice warn" style="max-width:860px"{% if not ready_all %} open{% endif %}>
   <summary>{{ '{:,}'.format(ready_all) }} of your {{ '{:,}'.format(everyone) }} contacts will get this. Why are the others skipped?</summary>
   <ul style="margin:6px 0 0">{% for why, n in left_out.items() %}<li>{{ '{:,}'.format(n) }}: {{ why }}</li>{% endfor %}</ul>
-  <p class="muted"><small>Addresses that would bounce, disposable addresses and people who asked not to be emailed are skipped automatically to protect your sender reputation. Everyone else gets your email.</small></p>
+  <p class="muted"><small>Addresses that would bounce, disposable addresses and people who asked not to be emailed are skipped automatically to protect your sender reputation. Everyone else gets your email. {% if left_out %}<a href="{{ url_for('suppression.index') }}">See your do-not-email list</a>{% endif %}</small></p>
 </details>{% endif %}
 
 <form method="post" class="compose" data-warn-unsaved action="{{ url_for('simple.compose') }}">{{ csrf() }}
@@ -56,6 +56,13 @@
   <div class="compose-row"><label for="speed">Speed</label>
     <select id="speed" name="speed">{% for k, v in SPEEDS.items() %}<option value="{{ k }}" {% if form.speed == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
   <p class="muted compose-note"><small>Sending confirms these are business contacts you have a genuine reason to email. People who opted out and addresses that would bounce are skipped automatically.</small></p>
+  {% if blocked %}<div class="notice warn">
+    <strong>On your do-not-email list:</strong>
+    <ul style="margin:6px 0">{% for b in blocked %}<li>{{ b.email_normalized }} — {{ b.label }} ({{ b.when }})</li>{% endfor %}</ul>
+    <small>Only take someone off if it was a mistake or it's your own address. If a person asked you to stop, don't email them again.</small>
+    {% if can('edit_contacts') %}<div class="mt"><button class="btn small" type="submit" name="action" value="allow_send"
+      data-confirm="Take {{ blocked|length }} address{{ 'es' if blocked|length != 1 }} off the do-not-email list and send? Only do this if it was a mistake or it's your own address.">Take off the list and send</button></div>{% endif %}
+  </div>{% endif %}
   <div class="compose-actions">
     <button class="btn primary send-btn" type="submit" name="action" value="send"
       data-confirm="Send this email now?">Send</button>

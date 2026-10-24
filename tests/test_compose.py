@@ -61,6 +61,23 @@ class Compose(AppCase):
         self.assertEqual({r["recipient_type"] for r in query("SELECT recipient_type FROM contacts WHERE email != 'gone@good.test'")},
                          {"business"})
 
+    def test_typed_address_on_do_not_email_list_shows_reason_and_can_be_taken_off(self):
+        from gm.db import query, scalar
+        from gm.suppression import add_suppression
+        self.contact("me@good.test")
+        add_suppression(self.ws_id, "me@good.test", "unsubscribe", "Replied asking to stop")
+        r = self.send(to_mode="paste", pasted="me@good.test")
+        self.assertEqual(r.status_code, 400)
+        page = r.get_data(as_text=True)
+        self.assertIn("On your do-not-email list", page)
+        self.assertIn("Replied asking to stop", page)
+        self.assertIn("Take off the list and send", page)
+        r = self.send(to_mode="paste", pasted="me@good.test", action="allow_send")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(scalar("SELECT COUNT(*) FROM suppressions"), 0)
+        self.assertEqual(scalar("SELECT COUNT(*) FROM campaign_recipients"), 1)
+        self.assertTrue(query("SELECT 1 FROM audit_log WHERE action = 'suppression.removed_from_compose'", one=True))
+
     def test_unknown_fields_are_fixed_not_blocked(self):
         from gm.db import query
         self.contact("ann@good.test")
