@@ -11,7 +11,7 @@
   <div class="stat"><div class="label">Accepted</div><div class="value">{{ imp.accepted }}</div><div class="hint">Imported, no warnings</div></div>
   <div class="stat"><div class="label">Review required</div><div class="value">{{ imp.review }}</div><div class="hint">Imported with a warning</div></div>
   <div class="stat"><div class="label">Duplicates</div><div class="value">{{ imp.duplicates }}</div><div class="hint">In the file or already a contact</div></div>
-  <div class="stat"><div class="label">Not imported</div><div class="value">{{ imp.invalid + imp.suppressed + imp.rejected }}</div><div class="hint">{{ imp.invalid }} invalid · {{ imp.suppressed }} suppressed · {{ imp.rejected }} no email</div></div>
+  <div class="stat"><div class="label">Not imported</div><div class="value">{{ imp.invalid + imp.suppressed + imp.rejected }}</div><div class="hint">{{ imp.invalid }} invalid · {{ imp.suppressed }} unsubscribed, reported spam or bounced · {{ imp.rejected }} no email</div></div>
 </div>
 {% if options %}<section class="card mt"><h2>Recorded on each contact</h2><dl class="kv"><dt>Source</dt><dd>{{ options.source_detail }}</dd><dt>Purpose</dt><dd>{{ options.purpose }}</dd><dt>Recipients</dt><dd>{{ RECIPIENT_TYPES.get(options.recipient_type) }}</dd><dt>Permission to email</dt><dd>{{ LAWFUL_BASES.get(options.lawful_basis) }}</dd></dl></section>{% endif %}
 <section class="card"><h2>Rows needing attention{% if issues|length == 200 %} (first 200; download the report for all){% endif %}</h2>

@@ -100,6 +100,25 @@ class OrganiseContacts(AppCase):
     def test_health_shows_version(self):
         self.assertEqual(self.client.get("/healthz").get_json()["version"], "dev")
 
+    def test_upload_unblocks_what_you_blocked_but_keeps_real_opt_outs(self):
+        from gm.db import query, scalar
+        from gm.suppression import add_suppression
+        self.contact("me@good.test")
+        add_suppression(self.ws_id, "me@good.test", "unsubscribe", "Replied asking to stop")
+        add_suppression(self.ws_id, "cleaned@good.test", "manual", "List cleaning")
+        add_suppression(self.ws_id, "optout@good.test", "unsubscribe", "Unsubscribe link")
+        add_suppression(self.ws_id, "spam@good.test", "complaint")
+        add_suppression(self.ws_id, "dead@good.test", "hard_bounce")
+        imp = self.import_file(["me@good.test", "cleaned@good.test", "optout@good.test", "spam@good.test", "dead@good.test",
+                                "new@good.test"])
+        self.assertEqual({r["email_normalized"] for r in query("SELECT email_normalized FROM suppressions")},
+                         {"optout@good.test", "spam@good.test", "dead@good.test"})
+        self.assertIn("Everyone in my contacts (3)", self.client.get("/compose").get_data(as_text=True))
+        page = self.client.get(f"/contacts/import/{imp}").get_data(as_text=True)
+        self.assertIn("Clicked unsubscribe", page)
+        self.assertIn("Reported your email as spam", page)
+        self.assertEqual(scalar("SELECT suppressed FROM imports WHERE id = ?", (imp,)), 3)
+
     def test_bulk_action_on_all_matching(self):
         import json
         from gm.db import scalar

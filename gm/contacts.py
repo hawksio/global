@@ -683,6 +683,16 @@ def _run_import(ctx):
     return counts
 
 
+# Only these stay blocked when a list is uploaded again: the person's own opt-out, a spam report, or a dead address.
+KEPT_BLOCKED = {"unsubscribe": "Clicked unsubscribe", "complaint": "Reported your email as spam",
+                "hard_bounce": "Address doesn't exist (bounced)"}
+
+
+def _self_blocked(row):
+    """True for entries you created yourself: added by hand, list cleaning, or marked "Asked to stop" in Sent."""
+    return row["reason"] == "manual" or (row["reason"] == "unsubscribe" and row["source"] == "Replied asking to stop")
+
+
 IMPORT_BATCH = 500
 IMPORT_NOW_ROWS = 20000   # files up to this size are imported during the upload request (about 10 seconds)
 
@@ -708,9 +718,17 @@ def _import_batch(imp, wid, opts, mapping, batch, first_row, counts, seen, issue
             issue(n, email, "duplicate", "Appears earlier in this file")
             continue
         seen.add(normalized)
-        if query("SELECT 1 FROM suppressions WHERE workspace_id = ? AND email_normalized = ?", (wid, normalized), one=True):
+        blocked = query("SELECT * FROM suppressions WHERE workspace_id = ? AND email_normalized = ?", (wid, normalized), one=True)
+        if blocked and _self_blocked(blocked):
+            # Blocked earlier by you (by hand, list cleaning or "Asked to stop"): uploading it again is your decision.
+            from .suppression import remove_suppression
+            remove_suppression(wid, normalized)
+            execute("UPDATE contacts SET marketing_opt_out = 0 WHERE workspace_id = ? AND email_normalized = ?", (wid, normalized))
+            blocked = None
+        if blocked:
             counts["suppressed"] += 1
-            issue(n, email, "suppressed", "On your suppression list (unsubscribed, bounced or complained); not imported")
+            issue(n, email, "suppressed", KEPT_BLOCKED.get(blocked["reason"], "Blocked by your email provider") +
+                  "; skipped to keep you within anti-spam law and protect your sender reputation")
             continue
         with transaction():
             cid, created = create_contact(wid, email, data, "import", source_url=data.get("source_url", ""),
