@@ -15,7 +15,7 @@ from flask import Blueprint, Response, abort, current_app, flash, jsonify, redir
 
 from . import jobs, validation
 from .contacts import VERIFICATION, add_event, csv_safe, read_csv, save_upload
-from .db import execute, now, query, scalar
+from .db import execute, now, query, scalar, transaction
 from .security import audit, current_user, require, ws_id
 
 bp = Blueprint("verification", __name__)
@@ -172,18 +172,22 @@ def _verify_csv(ctx):
 def _verify_contacts(ctx):
     ids = ctx.params["ids"]
     counts = {}
-    for n, cid in enumerate(ids):
-        if n % 50 == 0:
-            ctx.check_cancel()
-            ctx.progress(n, len(ids), f"Checked {n:,} of {len(ids):,}")
-        c = query("SELECT * FROM contacts WHERE id = ? AND workspace_id = ?", (cid, ctx.workspace_id), one=True)
-        if not c:
-            continue
-        res = validation.check(c["email"], ctx.workspace_id, dns=True)
-        validation.store_on_contact(cid, res)
-        if res["status"] != c["verification_status"]:
-            add_event(ctx.workspace_id, cid, "verification", f"{VERIFICATION[res['status']]}: {res['summary']}")
-        counts[res["status"]] = counts.get(res["status"], 0) + 1
+    # DNS lookups happen outside any transaction; each batch of results is then saved in one short write, so the
+    # website (which shares the database) never waits on a long-running check.
+    for start in range(0, len(ids), 50):
+        ctx.check_cancel()
+        ctx.progress(start, len(ids), f"Checked {start:,} of {len(ids):,}")
+        results = []
+        for cid in ids[start:start + 50]:
+            c = query("SELECT * FROM contacts WHERE id = ? AND workspace_id = ?", (cid, ctx.workspace_id), one=True)
+            if c:
+                results.append((c, validation.check(c["email"], ctx.workspace_id, dns=True)))
+        with transaction():
+            for c, res in results:
+                validation.store_on_contact(c["id"], res)
+                if res["status"] != c["verification_status"]:
+                    add_event(ctx.workspace_id, c["id"], "verification", f"{VERIFICATION[res['status']]}: {res['summary']}")
+                counts[res["status"]] = counts.get(res["status"], 0) + 1
     ctx.progress(len(ids), len(ids), "Finished")
     return counts
 

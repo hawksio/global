@@ -73,12 +73,32 @@ def _blocked_typed(wid, pasted):
     return out
 
 
-def _ready_count(wid, tag=None):
-    seg = {"verification_status": READY_STATUSES, "status": ["active"], "exclude_sandbox": True, "compose": True}
-    if tag:
-        seg["tag"] = tag
-    return len(segment_report(wid, seg)["eligible"])
+# Why a contact is skipped by Compose, as SQL (the same rules as campaigns.eligibility with business_ok=True, plus
+# the do-not-email list). Counting in SQL keeps Compose fast with tens of thousands of contacts.
+SKIP_REASON_SQL = """CASE
+    WHEN c.status != 'active' THEN 'Status is ' || c.status
+    WHEN c.marketing_opt_out THEN 'Opted out of marketing'
+    WHEN c.verification_status IN ('invalid', 'suppressed') THEN 'Address is ' || c.verification_status
+    WHEN c.verification_status = 'risky' THEN 'Address is risky (review it or include risky addresses deliberately)'
+    WHEN c.is_disposable THEN 'Disposable email domain'
+    WHEN EXISTS (SELECT 1 FROM suppressions s WHERE s.workspace_id = c.workspace_id
+                 AND s.email_normalized = c.email_normalized) THEN 'On the suppression list'
+    END"""
 
+
+def _ready_count(wid, tag=None):
+    join, args = "", [wid]
+    if tag:
+        join = "JOIN contact_tags ct ON ct.contact_id = c.id JOIN tags t ON t.id = ct.tag_id AND t.name = ?"
+        args = [tag, wid]
+    return scalar(f"SELECT COUNT(*) FROM contacts c {join} WHERE c.workspace_id = ? AND c.sandbox = 0 "
+                  f"AND {SKIP_REASON_SQL} IS NULL", args)
+
+
+def _skip_reasons(wid):
+    rows = query(f"SELECT reason, COUNT(*) AS n FROM (SELECT {SKIP_REASON_SQL} AS reason FROM contacts c "
+                 "WHERE c.workspace_id = ? AND c.sandbox = 0) WHERE reason IS NOT NULL GROUP BY reason ORDER BY n DESC", (wid,))
+    return {r["reason"]: r["n"] for r in rows}
 
 def _parse_addresses(raw):
     found, bad = [], []
@@ -197,13 +217,15 @@ def compose():
 
     def page(problems=(), code=200, hints=None):
         current = workspace()
-        tags = [dict(name=t["name"], n=_ready_count(wid, t["name"]))
-                for t in query("SELECT name FROM tags WHERE workspace_id = ? AND name NOT LIKE 'compose-%' ORDER BY name", (wid,))]
+        tags = [dict(t) for t in query(
+            f"SELECT t.name, COUNT(c.id) AS n FROM tags t LEFT JOIN contact_tags ct ON ct.tag_id = t.id "
+            f"LEFT JOIN contacts c ON c.id = ct.contact_id AND c.sandbox = 0 AND {SKIP_REASON_SQL} IS NULL "
+            "WHERE t.workspace_id = ? AND t.name NOT LIKE 'compose-%' GROUP BY t.id ORDER BY t.name", (wid,))]
         ready_all = _ready_count(wid)
         everyone = scalar("SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND sandbox = 0", (wid,))
         left_out = {}
         if ready_all < everyone:  # say exactly why some contacts aren't in "Everyone in my contacts"
-            left_out = dict(sorted(segment_report(wid, {"exclude_sandbox": True})["excluded"].items(), key=lambda kv: -kv[1]))
+            left_out = _skip_reasons(wid)
         blocked = _blocked_typed(wid, form["pasted"]) if form["to_mode"] == "paste" else []
         importing = scalar("SELECT COALESCE(SUM(total_rows), 0) FROM imports WHERE workspace_id = ? AND status IN "
                            "('queued', 'processing')", (wid,))

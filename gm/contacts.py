@@ -694,7 +694,7 @@ def _self_blocked(row):
 
 
 IMPORT_BATCH = 500
-IMPORT_NOW_ROWS = 20000   # files up to this size are imported during the upload request (about 10 seconds)
+IMPORT_NOW_ROWS = 2000    # files up to this size are imported during the upload request (a second or two on shared hosting)
 
 
 def _import_batch(imp, wid, opts, mapping, batch, first_row, counts, seen, issue):

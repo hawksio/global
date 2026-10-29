@@ -481,10 +481,11 @@ def reject(campaign_id):
 def launch_campaign(c, ws, start_at):
     """Snapshot eligible recipients and schedule step 0. Returns the number of recipients."""
     rep = segment_report(ws["id"], json.loads(c["segment"]))
-    with transaction():
-        for contact in rep["eligible"]:
-            execute("INSERT OR IGNORE INTO campaign_recipients (campaign_id, contact_id, email, next_step, next_send_at, "
-                    "created_at) VALUES (?, ?, ?, 0, ?, ?)", (c["id"], contact["id"], contact["email"], start_at, now()))
+    with transaction() as db:
+        created = now()
+        db.executemany("INSERT OR IGNORE INTO campaign_recipients (campaign_id, contact_id, email, next_step, next_send_at, "
+                       "created_at) VALUES (?, ?, ?, 0, ?, ?)",
+                       [(c["id"], contact["id"], contact["email"], start_at, created) for contact in rep["eligible"]])
         execute("UPDATE campaigns SET status = 'scheduled', scheduled_at = ?, launched_at = ?, updated_at = ? WHERE id = ?",
                 (start_at, now(), now(), c["id"]))
     return len(rep["eligible"])
