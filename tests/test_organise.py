@@ -97,6 +97,15 @@ class OrganiseContacts(AppCase):
         self.assertIn("1 of your 2 contacts will get this", page)
         self.assertIn("Address is invalid", page)
 
+    def test_static_files_are_versioned_and_cached(self):
+        import re
+        page = self.client.get("/").get_data(as_text=True)
+        m = re.search(r'href="(/static/app\.css\?v=[0-9a-f]{10})"', page)
+        self.assertIsNotNone(m, "CSS link carries a version")
+        r = self.client.get(m.group(1))
+        self.assertIn("max-age=31536000", r.headers["Cache-Control"])
+        r.close()
+
     def test_health_shows_version(self):
         self.assertEqual(self.client.get("/healthz").get_json()["version"], "dev")
 

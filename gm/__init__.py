@@ -35,6 +35,29 @@ class _RedactSecrets(logging.Filter):
         return True
 
 
+def _static_version(folder):
+    """Short fingerprint of the static files' names, sizes and modification times."""
+    import hashlib
+    h = hashlib.sha1()
+    for root, _, files in os.walk(folder):
+        for name in sorted(files):
+            st = os.stat(os.path.join(root, name))
+            h.update(f"{name}:{st.st_size}:{int(st.st_mtime)}".encode())
+    return h.hexdigest()[:10]
+
+
+def _keep_warm(base_url):
+    """Visit the site once a minute (from the cron worker) so shared hosting doesn't put the app to sleep;
+    otherwise the first visitor after a quiet spell waits several seconds for it to start."""
+    if not base_url.startswith("https://"):
+        return
+    try:
+        import urllib.request
+        urllib.request.urlopen(base_url + "/healthz", timeout=15).read()
+    except Exception:
+        pass
+
+
 def create_app(test_config=None):
     config.load_dotenv()
     problems = config.startup_errors()
@@ -95,6 +118,16 @@ def create_app(test_config=None):
             g.pop(key, None)
 
     app.before_request(check_csrf)
+
+    # Static files (CSS, JS, icons) get a version in their URL and are cached by the browser for a year, so pages
+    # don't re-download them on every visit; a new upload changes the version and browsers fetch the new files.
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 365 * 24 * 3600
+    static_version = _static_version(app.static_folder)
+
+    @app.url_defaults
+    def _versioned_static(endpoint, values):
+        if endpoint == "static":
+            values.setdefault("v", static_version)
 
     @app.after_request
     def _headers(resp):
@@ -213,6 +246,7 @@ def _register_cli(app):
         if once:
             n = run_pending(time_budget=budget)
             click.echo(f"Processed {n} job(s).")
+            _keep_warm(app.config["BASE_URL"])
             return
         click.echo("Worker running. Press Ctrl+C to stop.")
         while True:
