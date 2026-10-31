@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% from "_ui.html" import csrf, mbadge %}
+{% extends "base.html" %}{% from "_ui.html" import csrf, mbadge, pager %}
 {% block title %}{{ c.name }}{% endblock %}
 {% block content %}
 <p><a href="{{ url_for('simple.sent') }}">← Sent</a></p>
@@ -25,6 +25,8 @@
     <p><strong>{{ s.subject }}</strong></p><pre class="text">{{ s.text_body }}</pre>{% endfor %}
   </section>
   <section class="card"><h2>People</h2>
+    {% if total > 50 %}<form method="get" class="toolbar" role="search"><div class="field" style="flex:1"><label class="sr-only" for="pq">Find a person</label><input id="pq" type="search" name="q" value="{{ q }}" placeholder="Find an email address"></div>
+      <button class="btn small" type="submit">Find</button>{% if q %}<a class="btn small" href="{{ url_for('simple.sent_detail', campaign_id=c.id) }}">Clear</a>{% endif %}</form>{% endif %}
     <div class="table-wrap"><table><thead><tr><th>Email</th><th>Status</th><th></th></tr></thead><tbody>
     {% for p in people %}<tr><td>{{ p.email }}{% if p.company %}<br><small class="muted">{{ p.company }}</small>{% endif %}</td>
       <td>{% if p.replied_at %}<span class="badge ok">Replied</span>{% elif p.last_status %}{{ mbadge(p.last_status) }}{% elif p.status == 'stopped' %}<span class="badge warn">Skipped</span>{% else %}<span class="badge">Waiting</span>
@@ -37,6 +39,7 @@
         {% if not p.replied_at and can('edit_campaigns') and steps|length > 1 %}<form method="post" action="{{ url_for('campaigns.mark_replied', campaign_id=c.id, recipient_id=p.id) }}">{{ csrf() }}<button class="btn small" type="submit" title="Stop the follow-up for this person">They replied</button></form>{% endif %}</td></tr>
     {% else %}<tr><td colspan="3" class="muted">{{ 'Waiting for approval.' if c.status == 'pending_approval' else 'Nobody yet.' }}</td></tr>{% endfor %}
     </tbody></table></div>
+    {{ pager(page, pages, 'simple.sent_detail', dict(campaign_id=c.id, q=q) if q else dict(campaign_id=c.id)) }}
     <p class="muted mt"><small>“Accepted” = handed to the mail service; “Delivered” = the recipient's mail server took it. Nobody can see whether it landed in the inbox or spam folder.</small></p>
   </section>
 </div>

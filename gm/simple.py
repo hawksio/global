@@ -60,6 +60,10 @@ def fix_fields(text):
     return render.TOKEN.sub(repl, text or "")
 
 
+PEOPLE_PER_PAGE = 50
+TYPED_DNS_CHECKS = 5  # looked up while you wait; any more are checked in the background
+
+
 def _blocked_typed(wid, pasted):
     """Typed addresses that are on the do-not-email list, with a readable reason."""
     from .suppression import REASONS
@@ -315,13 +319,18 @@ def compose():
         audit("compose.business_confirmed", detail=f"{len(addresses)} typed addresses")
     if form["to_mode"] == "paste":
         tag = f"compose-{cid}"
-        for email in addresses:
+        later = []
+        for i, email in enumerate(addresses):
             contact_id, created = create_contact(wid, email, {}, "manual", purpose="Business email sent from Compose",
                                                  source_detail=f"Typed in Compose by {user['full_name']}",
                                                  recipient_type="business", lawful_basis="legitimate_interest")
-            if created:
+            if created and i < TYPED_DNS_CHECKS:
                 validation.store_on_contact(contact_id, validation.check(email, wid, dns=True))
+            elif created:
+                later.append(contact_id)
             apply_tags(wid, contact_id, [tag])
+        if later:
+            jobs.enqueue("verify_contacts", {"ids": later}, workspace_id=wid, user_id=user["id"], total=len(later))
         seg = json.loads(query("SELECT segment FROM campaigns WHERE id = ?", (cid,), one=True)["segment"])
         seg["tag"] = tag
         execute("UPDATE campaigns SET segment = ? WHERE id = ?", (json.dumps(seg), cid))
@@ -522,15 +531,24 @@ def _campaign(campaign_id):
 @require("view_campaigns")
 def sent_detail(campaign_id):
     c = _campaign(campaign_id)
+    q = request.args.get("q", "").strip().lower()
+    where, args = "r.campaign_id = ?", [c["id"]]
+    if q:
+        where += " AND lower(r.email) LIKE ?"
+        args.append(f"%{q}%")
+    total = scalar("SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ?", (c["id"],))
+    matched = scalar(f"SELECT COUNT(*) FROM campaign_recipients r WHERE {where}", args) if q else total
+    pages = max(1, -(-matched // PEOPLE_PER_PAGE))
+    page = min(max(1, request.args.get("page", 1, type=int)), pages)
     people = query("SELECT r.*, ct.first_name, ct.last_name, ct.company, "
                    "(SELECT m.status FROM messages m WHERE m.recipient_id = r.id ORDER BY m.id DESC LIMIT 1) AS last_status, "
                    "(SELECT m.last_error FROM messages m WHERE m.recipient_id = r.id ORDER BY m.id DESC LIMIT 1) AS last_error "
-                   "FROM campaign_recipients r JOIN contacts ct ON ct.id = r.contact_id WHERE r.campaign_id = ? ORDER BY r.id",
-                   (c["id"],))
-    total = len(people)
-    done = sum(1 for p in people if p["status"] != "active" or (p["last_status"] and p["next_step"] > 0))
+                   f"FROM campaign_recipients r JOIN contacts ct ON ct.id = r.contact_id WHERE {where} ORDER BY r.id "
+                   "LIMIT ? OFFSET ?", (*args, PEOPLE_PER_PAGE, (page - 1) * PEOPLE_PER_PAGE))
+    done = scalar("SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND (status != 'active' OR next_step > 0)",
+                  (c["id"],))
     return render_template("simple/sent_detail.html", c=c, steps=steps_of(c["id"]), people=people, total=total, done=done,
-                           SIMPLE_STATUS=SIMPLE_STATUS)
+                           SIMPLE_STATUS=SIMPLE_STATUS, page=page, pages=pages, q=q, matched=matched)
 
 
 @bp.route("/sent/<int:campaign_id>/people/<int:recipient_id>/now", methods=["POST"])

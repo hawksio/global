@@ -304,3 +304,46 @@ class Waiting(AppCase):
                                    "body": "Hello", "from_name": "", "action": "send"})
         self.assertEqual(r.status_code, 302)
         self.assertTrue(query("SELECT from_name FROM campaigns", one=True)["from_name"])
+
+
+class BigSends(AppCase):
+    def setUp(self):
+        super().setUp()
+        self.login()
+
+    def test_sent_page_shows_people_one_page_at_a_time_and_finds_them(self):
+        from gm.db import query
+        for i in range(120):
+            self.contact(f"p{i:03d}@good.test")
+        self.post("/compose", {"to_mode": "all", "subject": "Hi", "body": "Hi", "from_name": "Olive", "action": "send"})
+        cid = query("SELECT id FROM campaigns", one=True)["id"]
+        page = self.client.get(f"/sent/{cid}").get_data(as_text=True)
+        self.assertIn("to 120 people", page)
+        self.assertIn("Page 1 of 3", page)
+        self.assertIn("p000@good.test", page)
+        self.assertNotIn("p119@good.test", page)
+        self.assertIn("p119@good.test", self.client.get(f"/sent/{cid}?page=3").get_data(as_text=True))
+        self.assertIn("p119@good.test", self.client.get(f"/sent/{cid}?q=p119").get_data(as_text=True))
+
+    def test_send_button_stops_waiting_after_the_time_limit(self):
+        from unittest import mock
+        from gm import campaigns
+        from gm.db import query
+        from tests_live import live_mode
+        live_mode(self)
+        for i in range(5):
+            self.contact(f"p{i}@good.test")
+        with mock.patch.object(campaigns, "FIRST_BATCH_SECONDS", -1):
+            self.post("/compose", {"to_mode": "all", "subject": "Hi", "body": "Hi", "from_name": "Olive", "action": "send"})
+        self.assertEqual(len(self.provider.sent), 0, "nothing waits in the request past the limit")
+        self.assertEqual(query("SELECT COUNT(*) AS n FROM campaign_recipients WHERE status = 'active'", one=True)["n"], 5,
+                         "everyone is still queued for the background sender")
+
+    def test_long_typed_list_is_checked_in_the_background(self):
+        from gm.db import query
+        pasted = ", ".join(f"t{i}@good.test" for i in range(8))
+        r = self.post("/compose", {"to_mode": "paste", "pasted": pasted, "subject": "Hi", "body": "Hi", "from_name": "Olive",
+                                   "action": "send"})
+        self.assertEqual(r.status_code, 302)
+        job = query("SELECT * FROM jobs WHERE kind = 'verify_contacts'", one=True)
+        self.assertEqual(job["total"], 3)

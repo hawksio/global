@@ -511,12 +511,18 @@ ALTER TABLE workspaces ADD COLUMN smtp_security TEXT NOT NULL DEFAULT 'starttls'
 ALTER TABLE workspaces ADD COLUMN smtp_username TEXT NOT NULL DEFAULT '';
 """
 
+M6_MESSAGE_RECIPIENT = """
+-- The Sent page shows each recipient's latest message; without this index every row scans the whole message log.
+CREATE INDEX IF NOT EXISTS ix_messages_recipient ON messages(recipient_id, id);
+"""
+
 MIGRATIONS = [
     (1, "initial schema", M1_INITIAL),
     (2, "campaign email style", M2_PLAIN_STYLE),
     (3, "recipient wait reason", M3_WAIT_REASON),
     (4, "indexes for fast delete", M4_FAST_DELETE),
     (5, "smtp sending", M5_SMTP),
+    (6, "message recipient index", M6_MESSAGE_RECIPIENT),
 ]
 
 _migrate_lock = threading.Lock()

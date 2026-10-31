@@ -16,6 +16,7 @@ Sending (run by the background worker, never in a web request):
     every message is stored as 'simulated'.
 """
 import json
+import time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -773,27 +774,31 @@ def _precheck(c, ws, recipient):
     return (contact, None) if ok else (None, why)
 
 
-def process_campaign(c, ws, budget):
+FIRST_BATCH_SECONDS = 6  # the Send button waits at most this long; the background sender does the rest
+
+
+def process_campaign(c, ws, budget, max_seconds=None):
     """Send what is due for one campaign within the given budget. Returns (sent_count, stop_everything_reason)."""
     simulate = bool(c["dry_run"] or ws["sandbox_mode"])
     provider = mailer.SandboxProvider() if simulate else mailer.workspace_provider(ws)
     if not simulate and provider.name == "sandbox":
         return 0, "Real sending needs an email service (Resend or SMTP under Connections) or the campaign must be a practice run."
     try:
-        return _process_campaign(c, ws, budget, simulate, provider)
+        return _process_campaign(c, ws, budget, simulate, provider, max_seconds)
     finally:
         getattr(provider, "close", lambda: None)()  # SMTP keeps one connection open for the whole batch
 
 
-def _process_campaign(c, ws, budget, simulate, provider):
+def _process_campaign(c, ws, budget, simulate, provider, max_seconds=None):
     if c["status"] == "scheduled":
         execute("UPDATE campaigns SET status = 'sending' WHERE id = ? AND status = 'scheduled'", (c["id"],))
     limit = min(budget, c["rate_per_minute"])
     due = query("SELECT * FROM campaign_recipients WHERE campaign_id = ? AND status = 'active' AND next_send_at <= ? "
                 "ORDER BY next_send_at, id LIMIT ?", (c["id"], now(), limit * 3))
     sent = 0
+    started = time.monotonic()
     for r in due:
-        if sent >= limit:
+        if sent >= limit or (max_seconds and time.monotonic() - started > max_seconds):
             break
         if query("SELECT status FROM campaigns WHERE id = ?", (c["id"],), one=True)["status"] not in ("sending", "scheduled"):
             break  # paused or cancelled meanwhile
@@ -880,7 +885,7 @@ def send_first_batch(campaign_id):
                                               ws["daily_send_limit"] - _sent_since(ws["id"], "-1 day")))
     if budget <= 0:
         return 0
-    sent, stop = process_campaign(c, ws, budget)
+    sent, stop = process_campaign(c, ws, budget, FIRST_BATCH_SECONDS)
     if stop:
         if "API key" in stop:
             pause_workspace(ws, stop)
