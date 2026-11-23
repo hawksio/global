@@ -64,7 +64,7 @@ def create_app(test_config=None):
     if problems:
         raise RuntimeError("Unsafe production configuration:\n- " + "\n- ".join(problems))
     instance = config.instance_dir()
-    for sub in ("imports", "reports", "outbox", "backups"):
+    for sub in ("imports", "reports", "outbox", "backups", "template-cache"):
         os.makedirs(os.path.join(instance, sub), exist_ok=True)
     app = Flask(__name__, instance_path=instance, static_folder="static", template_folder="templates")
     production = config.is_production()
@@ -91,6 +91,11 @@ def create_app(test_config=None):
     )
     if test_config:
         app.config.update(test_config)
+    # Compiled page templates are kept on disk, so a freshly started app (shared hosting starts new ones often)
+    # doesn't spend time re-compiling every page on its first visits.
+    from jinja2 import FileSystemBytecodeCache
+    app.jinja_options = {**app.jinja_options,
+                         "bytecode_cache": FileSystemBytecodeCache(os.path.join(instance, "template-cache"))}
     proxies = int(config.env("GM_TRUST_PROXY") or 0)
     if proxies:
         from werkzeug.middleware.proxy_fix import ProxyFix

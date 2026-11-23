@@ -56,6 +56,66 @@ def _arguments():
     return args[0].lower().removeprefix("https://").removeprefix("http://").strip("/"), args[1].lower()
 
 
+STATIC_MARKER = "# Global Marketing static files"
+STATIC_HTACCESS = STATIC_MARKER + """ (written by setup_cpanel.py)
+<IfModule mod_headers.c>
+Header set Cache-Control "public, max-age=31536000, immutable"
+</IfModule>
+<IfModule mod_expires.c>
+ExpiresActive On
+ExpiresDefault "access plus 1 year"
+</IfModule>
+"""
+
+
+def find_document_root(app_root, home=None):
+    """The website folder whose .htaccess sends visitors to this app (cPanel writes PassengerAppRoot there)."""
+    home = home or os.path.expanduser("~")
+    candidates = [os.path.join(home, "public_html")]
+    for base in (home, os.path.join(home, "public_html")):
+        try:
+            candidates += [os.path.join(base, d) for d in sorted(os.listdir(base))]
+        except OSError:
+            pass
+    target = os.path.normcase(os.path.realpath(app_root))
+    for folder in candidates:
+        try:
+            with open(os.path.join(folder, ".htaccess"), encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    parts = line.strip().split(None, 1)
+                    if len(parts) == 2 and parts[0] == "PassengerAppRoot":
+                        root = os.path.normcase(os.path.realpath(os.path.expanduser(parts[1].strip().strip('"'))))
+                        if root == target and os.path.normcase(os.path.realpath(folder)) != target:
+                            return folder
+        except OSError:
+            continue
+    return None
+
+
+def publish_static(app_root, home=None):
+    """Copy gm/static into <website folder>/static. The web server then sends CSS, JS and icons itself, without
+    waking the Python app (on shared hosting that can take several seconds per file)."""
+    import shutil
+    docroot = find_document_root(app_root, home)
+    if not docroot:
+        return None
+    src, dest = os.path.join(app_root, "gm", "static"), os.path.join(docroot, "static")
+    try:
+        os.makedirs(dest, exist_ok=True)
+        for name in os.listdir(src):
+            if os.path.isfile(os.path.join(src, name)):
+                shutil.copy2(os.path.join(src, name), os.path.join(dest, name))
+        ht = os.path.join(dest, ".htaccess")
+        existing = open(ht, encoding="utf-8").read() if os.path.exists(ht) else ""
+        if not existing or existing.startswith(STATIC_MARKER):
+            with open(ht, "w", encoding="utf-8") as fh:
+                fh.write(STATIC_HTACCESS)
+    except OSError as exc:
+        print(f"   (Couldn't copy the page design files to {dest}: {exc}. The app still sends them itself.)")
+        return None
+    return dest
+
+
 def main():
     domain, email = _arguments()
     if not domain:
@@ -131,6 +191,11 @@ def main():
             print(f"3. Created the owner account {email}. Open this link within 24 hours to choose your password:")
             print(f"   https://{domain}/reset/{uid}/{token}?invite=1")
 
+    import compileall  # ready-compiled Python files make each fresh start of the app quicker
+    compileall.compile_dir(os.path.join(ROOT, "gm"), quiet=1)
+    published = publish_static(ROOT)
+    if published:
+        print(f"   Page design files copied to {published} so the web server sends them directly (faster pages).")
     venv = os.path.dirname(os.path.dirname(sys.executable))
     print("4. Add this in cPanel > Cron Jobs (Once Per Minute) so campaigns are sent:")
     print(f"   cd {ROOT} && {os.path.join(venv, 'bin', 'flask')} --app gm worker --once --budget 50 >> {data_dir}/worker.log 2>&1")
