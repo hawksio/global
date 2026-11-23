@@ -521,6 +521,14 @@ M7_REMEMBER_ME = """
 ALTER TABLE user_sessions ADD COLUMN remember INTEGER NOT NULL DEFAULT 0;
 """
 
+M8_LOGIN_LINK = """
+-- Private sign-in link: opening it signs the user in without the login page. The hash finds the user; the
+-- encrypted copy lets Settings show the link again.
+ALTER TABLE users ADD COLUMN login_link_hash TEXT;
+ALTER TABLE users ADD COLUMN login_link_enc TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS ix_users_login_link ON users(login_link_hash);
+"""
+
 MIGRATIONS = [
     (1, "initial schema", M1_INITIAL),
     (2, "campaign email style", M2_PLAIN_STYLE),
@@ -529,6 +537,7 @@ MIGRATIONS = [
     (5, "smtp sending", M5_SMTP),
     (6, "message recipient index", M6_MESSAGE_RECIPIENT),
     (7, "keep me signed in", M7_REMEMBER_ME),
+    (8, "private sign-in link", M8_LOGIN_LINK),
 ]
 
 _migrate_lock = threading.Lock()

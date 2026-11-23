@@ -181,6 +181,11 @@ def main():
             print(f"   https://{domain}/reset/{user['id']}/{token}?invite=1")
         elif user:
             print(f"3. The account {email} already exists and has been used: nothing changed.")
+        if user:
+            from gm.auth import current_login_link, new_login_link
+            link = current_login_link(user) or new_login_link(user["id"])
+            print("   Your private sign-in link (bookmark it; it opens the app with no login page; keep it private):")
+            print(f"   {link}")
         else:
             from werkzeug.security import generate_password_hash
             from gm.auth import create_workspace

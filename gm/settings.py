@@ -80,6 +80,18 @@ def index():
                     "complaint_pause_pct = ?, four_eyes_approval = ?, email_login_codes = ? WHERE id = ?",
                     (*values.values(), bounce, complaint, int(f.get("four_eyes_approval") == "on"),
                      int(f.get("email_login_codes") == "on"), ws["id"]))
+        elif section == "login_link":
+            from .auth import new_login_link
+            me = current_user()
+            if f.get("do") == "off":
+                execute("UPDATE users SET login_link_hash = NULL, login_link_enc = NULL WHERE id = ?", (me["id"],))
+                audit("account.login_link_off")
+                flash("Your private sign-in link is switched off. Old copies of it no longer work.", "success")
+            else:
+                new_login_link(me["id"])
+                audit("account.login_link_new")
+                flash("Your private sign-in link is ready below. Bookmark it; any older link stops working.", "success")
+            return redirect(url_for("settings.index") + "#login-link")
         elif section == "remove_samples":
             from .sandbox import remove
             n = remove(ws["id"])
@@ -94,7 +106,8 @@ def index():
         return redirect(url_for("settings.index"))
     from .db import scalar
     samples = scalar("SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND sandbox = 1", (ws["id"],)) +         scalar("SELECT COUNT(*) FROM campaigns WHERE workspace_id = ? AND name LIKE '[Sample]%'", (ws["id"],))
-    return render_template("settings/index.html", ws=ws, samples=samples)
+    from .auth import current_login_link
+    return render_template("settings/index.html", ws=ws, samples=samples, login_link=current_login_link(current_user()))
 
 
 @bp.route("/integrations", methods=["GET", "POST"])

@@ -15,7 +15,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from . import transactional
 from .db import execute, now, query, transaction
 from .security import (audit, client_ip, current_session, current_user, decrypt, encrypt, end_session, login_required,
-                       new_totp_secret, rate_limited, revoke_all_sessions, start_session, throttle, totp_uri,
+                       new_totp_secret, rate_limited, revoke_all_sessions, sha256, start_session, throttle, totp_uri,
                        verify_totp)
 
 bp = Blueprint("auth", __name__)
@@ -194,6 +194,44 @@ def login():
             return redirect(url_for("auth.login_code"))
         return _finish(user, nxt)
     return render_template("auth/login.html", email="", next=nxt)
+
+
+# ---------------------------------------------------------------- private sign-in link
+def new_login_link(user_id):
+    """Make (or replace) the user's private sign-in link; any older link stops working. Returns the full URL."""
+    token = secrets.token_urlsafe(32)
+    execute("UPDATE users SET login_link_hash = ?, login_link_enc = ? WHERE id = ?",
+            (sha256(token), encrypt(token), user_id))
+    return login_link_url(token)
+
+
+def login_link_url(token):
+    return f"{current_app.config['BASE_URL']}/go/{token}"
+
+
+def current_login_link(user):
+    token = decrypt(user["login_link_enc"] or "") if user["login_link_hash"] else ""
+    return login_link_url(token) if token else ""
+
+
+@bp.route("/go/<token>")
+def login_link(token):
+    """Bookmark this link: it signs you straight in on this device (kept for 90 days, renewed each time)."""
+    if rate_limited(f"login-link:{client_ip()}", 20, 900):
+        abort(429)
+    user = query("SELECT * FROM users WHERE login_link_hash = ?", (sha256(token),), one=True) if len(token) > 20 else None
+    if not user or not user["is_active"]:
+        flash("That sign-in link no longer works. Sign in below, then make a new link in Settings.", "error")
+        return redirect(url_for("auth.login"))
+    me = current_user()
+    if me and me["id"] == user["id"]:
+        return redirect(url_for("main.overview"))
+    start_session(user, remember=True)
+    execute("UPDATE users SET last_login_at = ?, failed_logins = 0 WHERE id = ?", (now(), user["id"]))
+    audit("account.login", detail="private link", workspace_id=user["workspace_id"], user_id=user["id"])
+    if user["is_superadmin"] and not user["workspace_id"]:
+        return redirect(url_for("admin.system"))
+    return redirect(url_for("main.overview"))
 
 
 def _finish(user, nxt, method="password"):

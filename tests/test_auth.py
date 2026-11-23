@@ -266,3 +266,47 @@ class KeepSignedIn(AppCase):
     def test_login_page_offers_keep_me_signed_in_ticked(self):
         page = self.client.get("/login").get_data(as_text=True)
         self.assertIn('name="remember" checked', page)
+
+
+class PrivateLink(AppCase):
+    def make_link(self):
+        self.login()
+        self.post("/settings/", {"section": "login_link"})
+        page = self.client.get("/settings/").get_data(as_text=True)
+        import re
+        link = re.search(r'value="(https?://[^"]+/go/[^"]+)"', page).group(1)
+        return "/go/" + link.split("/go/")[1]
+
+    def fresh_client(self):
+        self.client = self.app.test_client()
+
+    def test_link_signs_in_without_the_login_page_and_remembers_the_device(self):
+        from gm.db import query
+        path = self.make_link()
+        self.fresh_client()
+        self.assertEqual(self.client.get("/compose").status_code, 302, "not signed in yet")
+        r = self.client.get(path)
+        self.assertEqual(r.status_code, 302)
+        self.assertNotIn("/login", r.headers["Location"])
+        self.assertEqual(self.client.get("/compose").status_code, 200)
+        self.assertEqual(query("SELECT remember FROM user_sessions ORDER BY id DESC", one=True)["remember"], 1)
+
+    def test_new_link_or_switching_off_stops_the_old_one(self):
+        old = self.make_link()
+        self.fresh_client()
+        new = self.make_link()
+        self.assertNotEqual(old, new)
+        self.fresh_client()
+        self.assertIn("/login", self.client.get(old).headers["Location"])
+        self.assertNotIn("/login", self.client.get(new).headers["Location"])
+        self.fresh_client()
+        self.login()
+        self.post("/settings/", {"section": "login_link", "do": "off"})
+        self.fresh_client()
+        self.assertIn("/login", self.client.get(new).headers["Location"])
+
+    def test_wrong_link_does_nothing(self):
+        self.fresh_client()
+        r = self.client.get("/go/not-a-real-link-at-all-0123456789")
+        self.assertIn("/login", r.headers["Location"])
+        self.assertEqual(self.client.get("/compose").status_code, 302)

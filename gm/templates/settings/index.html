@@ -2,6 +2,19 @@
 {% block title %}Settings{% endblock %}
 {% block content %}
 <div class="page-head"><div><h1>Settings</h1><p>What your emails say about you.</p></div></div>
+<div class="card" id="login-link" style="max-width:760px">
+  <h2>🔑 Your private sign-in link</h2>
+  {% if login_link %}
+  <p>Open this link to go straight into your account, with no login page. <strong>Bookmark it</strong> on your computer and phone.</p>
+  <div class="field"><input type="text" readonly value="{{ login_link }}" onclick="this.select()" aria-label="Your private sign-in link"></div>
+  <p class="muted"><small>Keep it private: anyone who has this link can get into your account. If you think someone else has it, click <em>Make a new link</em> and the old one stops working.</small></p>
+  <form method="post" style="display:inline">{{ csrf() }}<input type="hidden" name="section" value="login_link"><button class="btn" type="submit">Make a new link</button></form>
+  <form method="post" style="display:inline">{{ csrf() }}<input type="hidden" name="section" value="login_link"><input type="hidden" name="do" value="off"><button class="btn" type="submit">Switch the link off</button></form>
+  {% else %}
+  <p>Get a link that takes you straight into your account with no login page. Bookmark it on your computer and phone.</p>
+  <form method="post">{{ csrf() }}<input type="hidden" name="section" value="login_link"><button class="btn primary" type="submit">Make my private link</button></form>
+  {% endif %}
+</div>
 <form method="post" class="card" style="max-width:760px">{{ csrf() }}<input type="hidden" name="section" value="details">
   <h2>Your details</h2>
   <div class="row">
