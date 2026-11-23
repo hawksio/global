@@ -122,7 +122,7 @@ def current_session():
         if sid:
             idle = current_app.config["SESSION_IDLE_MINUTES"] * 60
             row = query("SELECT * FROM user_sessions WHERE sid_hash = ? AND revoked_at IS NULL AND expires_at > ? "
-                        "AND last_seen_at > ?", (sha256(sid), now(), _ts(idle)), one=True)
+                        "AND (remember = 1 OR last_seen_at > ?)", (sha256(sid), now(), _ts(idle)), one=True)
             if row is None:
                 session.pop("sid", None)
             elif row["last_seen_at"] < _ts(60):
@@ -138,16 +138,21 @@ def current_user():
     return g.user
 
 
-def start_session(user):
+REMEMBER_DAYS = 90  # "Keep me signed in on this device"
+
+
+def start_session(user, remember=False):
+    """remember: stay signed in on this device for REMEMBER_DAYS (no idle timeout); otherwise the sign-in ends
+    after SESSION_IDLE_MINUTES of inactivity, after SESSION_HOURS, or when the browser closes."""
     session.clear()
     sid = secrets.token_urlsafe(32)
-    hours = current_app.config["SESSION_HOURS"]
-    execute("INSERT INTO user_sessions (user_id, sid_hash, created_at, last_seen_at, expires_at, ip, user_agent) "
-            "VALUES (?, ?, ?, ?, datetime('now', ?), ?, ?)",
+    hours = REMEMBER_DAYS * 24 if remember else current_app.config["SESSION_HOURS"]
+    execute("INSERT INTO user_sessions (user_id, sid_hash, created_at, last_seen_at, expires_at, ip, user_agent, remember) "
+            "VALUES (?, ?, ?, ?, datetime('now', ?), ?, ?, ?)",
             (user["id"], sha256(sid), now(), now(), f"+{hours} hours", client_ip(),
-             (request.user_agent.string or "")[:200]))
+             (request.user_agent.string or "")[:200], int(remember)))
     session["sid"] = sid
-    session.permanent = True
+    session.permanent = remember  # a remembered sign-in survives closing the browser
     execute("UPDATE users SET last_login_at = ?, failed_logins = 0, locked_until = NULL WHERE id = ?", (now(), user["id"]))
     g.pop("user", None)
     g.pop("user_session", None)

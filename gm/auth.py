@@ -162,6 +162,7 @@ def login():
             return render_template("auth/login.html", email=email, next=nxt), 429
         user = query("SELECT * FROM users WHERE email = ?", (email,), one=True)
         password = request.form.get("password", "")
+        session["remember_me"] = request.form.get("remember") == "on"  # kept through the 2FA / code step
         locked = user and user["locked_until"] and user["locked_until"] > now()
         ok = bool(user) and user["is_active"] and not locked and check_password_hash(user["password_hash"], password)
         if not user:
@@ -196,7 +197,7 @@ def login():
 
 
 def _finish(user, nxt, method="password"):
-    start_session(user)
+    start_session(user, remember=bool(session.get("remember_me")))
     audit("account.login", detail=method, workspace_id=user["workspace_id"], user_id=user["id"])
     if user["is_superadmin"] and not user["workspace_id"]:
         return redirect(url_for("admin.system"))

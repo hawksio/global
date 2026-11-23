@@ -78,7 +78,7 @@ def create_app(test_config=None):
         MAX_IMPORT_ROWS=int(config.env("GM_MAX_IMPORT_ROWS")),
         SESSION_COOKIE_NAME="__Host-gm" if production else "gm_session", SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=config.flag("GM_SECURE_COOKIES"),
-        PERMANENT_SESSION_LIFETIME=timedelta(hours=int(config.env("GM_SESSION_HOURS"))),
+        PERMANENT_SESSION_LIFETIME=timedelta(days=90),  # only "Keep me signed in" sign-ins use a lasting cookie
         SESSION_HOURS=int(config.env("GM_SESSION_HOURS")), SESSION_IDLE_MINUTES=int(config.env("GM_SESSION_IDLE_MINUTES")),
         BASE_URL=config.env("GM_BASE_URL").rstrip("/"), ALLOW_SIGNUP=config.flag("GM_ALLOW_SIGNUP"),
         RESEND_API_KEY=config.env("GM_RESEND_API_KEY"), RESEND_WEBHOOK_SECRET=config.env("GM_RESEND_WEBHOOK_SECRET"),

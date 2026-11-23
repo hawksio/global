@@ -241,3 +241,28 @@ class Migrations(AppCase):
             self.assertTrue(any("pre-migration-999" in f for f in os.listdir(backups)))
         finally:
             MIGRATIONS.pop()
+
+
+class KeepSignedIn(AppCase):
+    def test_remembered_sign_in_survives_idle_time_and_lasts_90_days(self):
+        from gm.db import execute, query
+        r = self.client.post("/login", data={"csrf_token": self.token(), "email": "owner@acme.test", "password": PASSWORD,
+                                             "remember": "on"})
+        self.assertEqual(r.status_code, 302)
+        row = query("SELECT * FROM user_sessions ORDER BY id DESC", one=True)
+        self.assertEqual(row["remember"], 1)
+        self.assertGreater(row["expires_at"], query("SELECT datetime('now', '+89 days') AS t", one=True)["t"])
+        cookie = r.headers.get("Set-Cookie", "")
+        self.assertIn("Expires=", cookie, "the cookie survives closing the browser")
+        execute("UPDATE user_sessions SET last_seen_at = datetime('now', '-3 days')")
+        self.assertEqual(self.client.get("/compose").status_code, 200, "still signed in after days without activity")
+
+    def test_unticked_sign_in_still_times_out(self):
+        from gm.db import execute
+        self.client.post("/login", data={"csrf_token": self.token(), "email": "owner@acme.test", "password": PASSWORD})
+        execute("UPDATE user_sessions SET last_seen_at = datetime('now', '-3 hours')")
+        self.assertEqual(self.client.get("/compose").status_code, 302, "idle sign-in ends as before")
+
+    def test_login_page_offers_keep_me_signed_in_ticked(self):
+        page = self.client.get("/login").get_data(as_text=True)
+        self.assertIn('name="remember" checked', page)

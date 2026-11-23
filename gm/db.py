@@ -516,6 +516,11 @@ M6_MESSAGE_RECIPIENT = """
 CREATE INDEX IF NOT EXISTS ix_messages_recipient ON messages(recipient_id, id);
 """
 
+M7_REMEMBER_ME = """
+-- "Keep me signed in": a remembered sign-in lasts REMEMBER_DAYS and isn't ended by the idle timeout.
+ALTER TABLE user_sessions ADD COLUMN remember INTEGER NOT NULL DEFAULT 0;
+"""
+
 MIGRATIONS = [
     (1, "initial schema", M1_INITIAL),
     (2, "campaign email style", M2_PLAIN_STYLE),
@@ -523,6 +528,7 @@ MIGRATIONS = [
     (4, "indexes for fast delete", M4_FAST_DELETE),
     (5, "smtp sending", M5_SMTP),
     (6, "message recipient index", M6_MESSAGE_RECIPIENT),
+    (7, "keep me signed in", M7_REMEMBER_ME),
 ]
 
 _migrate_lock = threading.Lock()
