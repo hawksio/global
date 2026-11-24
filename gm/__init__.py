@@ -258,8 +258,13 @@ def _register_cli(app):
         import time
         from .jobs import run_pending
         if once:
-            from .watchdog import time_limit
-            time_limit(budget + 120)  # if this run hangs, it ends itself instead of locking the database
+            from .watchdog import RUN_LIMIT, single_worker, time_limit
+            lock = single_worker(app.instance_path)
+            if lock is None:
+                click.echo("Another worker is still busy; nothing to do this minute.")
+                _keep_warm(app.config["BASE_URL"])
+                return
+            time_limit(RUN_LIMIT)  # if this run hangs, it ends itself instead of locking the database
             n = run_pending(time_budget=budget)
             click.echo(f"Processed {n} job(s).")
             _keep_warm(app.config["BASE_URL"])

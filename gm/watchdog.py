@@ -11,7 +11,25 @@ Both only work on Linux/Unix (the hosting server); on Windows they do nothing.
 import os
 import signal
 
-MAX_AGE = 10 * 60  # seconds; a cron worker normally finishes within a minute
+RUN_LIMIT = 15 * 60  # a cron worker ends itself after this (a long import or check resumes on the next run)
+MAX_AGE = 20 * 60    # older cron workers / setup runs are treated as stuck and stopped
+
+
+def single_worker(instance_dir):
+    """Only one cron worker runs at a time: two would compete for the server's small CPU share and the database.
+    Returns an open lock file to keep for the whole run, or None when another worker is already running.
+    The lock disappears by itself when its process ends (even if killed)."""
+    try:
+        import fcntl
+    except ImportError:  # Windows (development): no lock needed
+        return open(os.devnull)
+    fh = open(os.path.join(instance_dir, "worker.lock"), "w")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return None
+    return fh
 
 
 def time_limit(seconds):

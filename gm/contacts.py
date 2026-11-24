@@ -605,7 +605,7 @@ def import_map(import_id):
         source_detail = form.get("source_detail", "").strip() or f"Imported file {imp['filename']}"
         options = {"purpose": purpose[:300], "source_detail": source_detail[:300],
                    "recipient_type": form["recipient_type"], "lawful_basis": form["lawful_basis"],
-                   "tag": form.get("tag", "").strip()[:40], "dns": form.get("dns") == "on",
+                   "tag": form.get("tag", "").strip()[:40], "dns": False,  # domains are checked afterwards, in the background
                    "update_existing": form.get("update_existing") == "on"}
         job = jobs.enqueue("import_contacts", {"import_id": import_id}, workspace_id=imp["workspace_id"],
                            user_id=current_user()["id"], dedupe_key=f"import:{import_id}", total=imp["total_rows"])
@@ -653,6 +653,10 @@ def _run_import(ctx):
     execute("DELETE FROM import_issues WHERE import_id = ?", (imp["id"],))  # safe re-run after a crash
     mapping = {int(k): v for k, v in json.loads(imp["mapping"]).items()}
     opts = json.loads(imp["options"])
+    # Never check domains over the network during the import itself: that would hold the database locked for
+    # minutes and make the whole website wait. The import only checks the format; domains are checked afterwards
+    # by the background verify job, which does its network calls outside any database lock.
+    opts["dns"] = False
     rows = read_csv(os.path.join(current_app.config["IMPORT_DIR"], imp["stored_name"]))[1:]
     counts = dict(accepted=0, rejected=0, duplicates=0, invalid=0, suppressed=0, review=0)
     seen = set()

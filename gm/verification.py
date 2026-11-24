@@ -168,14 +168,25 @@ def _verify_csv(ctx):
     return counts
 
 
+VERIFY_SLICE_SECONDS = 40  # a big check is done in slices so sending campaigns never waits behind it
+
+
 @jobs.handler("verify_contacts")
 def _verify_contacts(ctx):
+    import time
     ids = ctx.params["ids"]
     counts = {}
+    started = time.monotonic()
     # DNS lookups happen outside any transaction; each batch of results is then saved in one short write, so the
     # website (which shares the database) never waits on a long-running check.
     for start in range(0, len(ids), 50):
         ctx.check_cancel()
+        if start and time.monotonic() - started > VERIFY_SLICE_SECONDS:
+            rest = ids[start:]
+            jobs.enqueue("verify_contacts", {"ids": rest}, workspace_id=ctx.workspace_id, user_id=ctx.user_id,
+                         total=len(rest))
+            counts["continued"] = len(rest)
+            return counts
         ctx.progress(start, len(ids), f"Checked {start:,} of {len(ids):,}")
         results = []
         for cid in ids[start:start + 50]:

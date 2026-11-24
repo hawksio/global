@@ -116,7 +116,10 @@ class Contacts(AppCase):
         imp = query("SELECT * FROM imports WHERE id = ?", (imp_id,), one=True)
         self.assertEqual(imp["status"], "completed")
         self.assertEqual((imp["accepted"], imp["duplicates"], imp["invalid"], imp["rejected"], imp["suppressed"], imp["review"]),
-                         (1, 2, 1, 1, 1, 2))
+                         (2, 2, 1, 1, 1, 1))
+        # Domains are checked by the background job after the import, not while holding the database.
+        self.assertEqual(query("SELECT verification_status FROM contacts WHERE email_normalized = 'two@nowhere.test'",
+                               one=True)["verification_status"], "invalid")
         c = query("SELECT * FROM contacts WHERE email_normalized = 'one@good.test'", one=True)
         self.assertEqual((c["source"], c["purpose"], c["lawful_basis"]), ("import", "Prospecting", "legitimate_interest"))
         self.assertIn("Trade fair list", c["source_detail"])

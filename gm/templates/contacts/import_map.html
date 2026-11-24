@@ -26,7 +26,7 @@
     </div>
     <div class="field"><label for="source_detail">Where they came from (optional)</label><input id="source_detail" type="text" name="source_detail" placeholder="e.g. Trade fair 2026 (default: the file name)"></div>
     <div class="field"><label for="purpose">Why you'll email them (optional)</label><input id="purpose" type="text" name="purpose" placeholder="Default: business outreach"></div>
-    <label class="check"><input type="checkbox" name="dns" checked> <span>Check each address's domain while importing (free; a few seconds per new domain)</span></label>
+    <p class="muted"><small>Each address's domain is checked in the background after the import (free); you can send straight away.</small></p>
     <label class="check"><input type="checkbox" name="update_existing"> <span>For addresses already in your contacts, fill in empty fields from this file</span></label>
   </details>
   <div class="actions mt"><button class="btn primary" type="submit">Import</button><a class="btn" href="{{ url_for('contacts.import_upload') }}">Cancel</a></div>

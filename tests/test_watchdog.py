@@ -18,7 +18,7 @@ class StuckWorkers(unittest.TestCase):
         self.assertFalse(watchdog._is_ours(["flask", "--app", "gm", "worker"]), "a VPS worker service is left alone")
 
     def test_kills_old_workers_but_not_new_ones_or_itself(self):
-        procs = [(101, 1200.0, ["flask", "--app", "gm", "worker", "--once"]),
+        procs = [(101, 1500.0, ["flask", "--app", "gm", "worker", "--once"]),
                  (102, 30.0, ["flask", "--app", "gm", "worker", "--once"]),
                  (103, 5000.0, ["lsphp"]),
                  (os.getpid(), 9999.0, ["flask", "--app", "gm", "worker"])]
@@ -30,3 +30,32 @@ class StuckWorkers(unittest.TestCase):
             stopped = watchdog.stop_stuck_workers(kill=lambda pid, sig: killed.append(pid))
         self.assertEqual(stopped, [101])
         self.assertEqual(killed, [101])
+
+
+class SlicedChecks(unittest.TestCase):
+    def test_big_domain_check_continues_in_a_new_slice(self):
+        from helpers import AppCase  # noqa: F401  (sets up import path)
+        import gm.verification as v
+        case = _App()
+        case.setUp()
+        try:
+            from gm import jobs
+            from gm.db import query
+            ids = [case.contact(f"p{i}@good.test") for i in range(120)]
+            jobs.enqueue("verify_contacts", {"ids": ids}, workspace_id=case.ws_id)
+            with mock.patch.object(v, "VERIFY_SLICE_SECONDS", -1):
+                jobs.run_one()
+            follow = query("SELECT * FROM jobs WHERE kind = 'verify_contacts' AND status = 'queued'", one=True)
+            self.assertIsNotNone(follow, "the rest is queued as a new slice")
+            self.assertEqual(len(__import__("json").loads(follow["params"])["ids"]), 70)
+        finally:
+            case.tearDown()
+
+
+def _App():
+    from helpers import AppCase
+
+    class C(AppCase):
+        def runTest(self):
+            pass
+    return C()
