@@ -163,6 +163,10 @@ def main():
         print(f"1. Created .env with production settings and new secret keys (private: permissions 600).")
 
     sys.path.insert(0, ROOT)
+    from gm.watchdog import stop_stuck_workers
+    stuck = stop_stuck_workers()
+    if stuck:
+        print(f"   Stopped {len(stuck)} stuck background process(es) that were locking the database.")
     from gm import create_app
     app = create_app()  # applies database migrations
     with app.app_context():

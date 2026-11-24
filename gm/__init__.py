@@ -7,6 +7,7 @@ Create admin:   .venv\\Scripts\\flask --app gm create-admin --email you@example.
 import logging
 import os
 import secrets
+import sys
 from datetime import timedelta
 
 import click
@@ -104,6 +105,14 @@ def create_app(test_config=None):
     for handler in logging.getLogger().handlers:
         handler.addFilter(_RedactSecrets())
     app.logger.addFilter(_RedactSecrets())
+
+    if "worker" in sys.argv[1:] and not test_config:
+        # A worker stuck from an earlier run can hold the database locked (nobody could sign in or save);
+        # stop it before this run touches the database.
+        from .watchdog import stop_stuck_workers
+        stuck = stop_stuck_workers()
+        if stuck:
+            app.logger.warning("Stopped stuck background worker(s): %s", stuck)
 
     from .db import init_db
     init_db(app)
@@ -249,6 +258,8 @@ def _register_cli(app):
         import time
         from .jobs import run_pending
         if once:
+            from .watchdog import time_limit
+            time_limit(budget + 120)  # if this run hangs, it ends itself instead of locking the database
             n = run_pending(time_budget=budget)
             click.echo(f"Processed {n} job(s).")
             _keep_warm(app.config["BASE_URL"])
