@@ -529,6 +529,14 @@ ALTER TABLE users ADD COLUMN login_link_enc TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS ix_users_login_link ON users(login_link_hash);
 """
 
+M9_NO_EMAIL_CODES = """
+-- Emailed sign-in codes weren't arriving for the owner, so they are switched off (they can be turned on again in
+-- Settings). Plus an index so the contact list (newest first) doesn't sort the whole table.
+UPDATE users SET email_codes = 0;
+UPDATE workspaces SET email_login_codes = 0;
+CREATE INDEX IF NOT EXISTS ix_contacts_ws_created_id ON contacts(workspace_id, created_at, id);
+"""
+
 MIGRATIONS = [
     (1, "initial schema", M1_INITIAL),
     (2, "campaign email style", M2_PLAIN_STYLE),
@@ -538,6 +546,7 @@ MIGRATIONS = [
     (6, "message recipient index", M6_MESSAGE_RECIPIENT),
     (7, "keep me signed in", M7_REMEMBER_ME),
     (8, "private sign-in link", M8_LOGIN_LINK),
+    (9, "no emailed sign-in codes; contact list index", M9_NO_EMAIL_CODES),
 ]
 
 _migrate_lock = threading.Lock()
