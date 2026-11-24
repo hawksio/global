@@ -310,3 +310,14 @@ class PrivateLink(AppCase):
         r = self.client.get("/go/not-a-real-link-at-all-0123456789")
         self.assertIn("/login", r.headers["Location"])
         self.assertEqual(self.client.get("/compose").status_code, 302)
+
+
+class NeverSignInAgain(AppCase):
+    def test_using_a_remembered_device_keeps_pushing_the_end_date_ahead(self):
+        from gm.db import execute, query
+        self.client.post("/login", data={"csrf_token": self.token(), "email": "owner@acme.test", "password": PASSWORD,
+                                         "remember": "on"})
+        execute("UPDATE user_sessions SET expires_at = datetime('now', '+1 day'), last_seen_at = datetime('now', '-80 days')")
+        self.assertEqual(self.client.get("/compose").status_code, 200)
+        row = query("SELECT expires_at FROM user_sessions ORDER BY id DESC", one=True)
+        self.assertGreater(row["expires_at"], query("SELECT datetime('now', '+89 days') AS t", one=True)["t"])

@@ -126,7 +126,13 @@ def current_session():
             if row is None:
                 session.pop("sid", None)
             elif row["last_seen_at"] < _ts(60):
-                execute("UPDATE user_sessions SET last_seen_at = ? WHERE id = ?", (now(), row["id"]))
+                if row["remember"]:
+                    # A remembered device never has to sign in again while it's used: each visit pushes the end
+                    # date another REMEMBER_DAYS ahead (it only ends after 90 days without any visit, or Sign out).
+                    execute("UPDATE user_sessions SET last_seen_at = ?, expires_at = datetime('now', ?) WHERE id = ?",
+                            (now(), f"+{REMEMBER_DAYS * 24} hours", row["id"]))
+                else:
+                    execute("UPDATE user_sessions SET last_seen_at = ? WHERE id = ?", (now(), row["id"]))
         g.user_session = row
     return g.user_session
 
