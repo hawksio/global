@@ -9,6 +9,7 @@ Emails from Compose use the 'plain' style: they look like a message typed in Gma
 which is what gives one-to-one business email the best chance of reaching the inbox.
 """
 import json
+import time
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
@@ -62,6 +63,7 @@ def fix_fields(text):
 
 PEOPLE_PER_PAGE = 50
 TYPED_DNS_CHECKS = 5  # looked up while you wait; any more are checked in the background
+TYPED_DNS_SECONDS = 2  # ...but never for more than this; the rest are checked in the background
 
 
 def _blocked_typed(wid, pasted):
@@ -319,12 +321,12 @@ def compose():
         audit("compose.business_confirmed", detail=f"{len(addresses)} typed addresses")
     if form["to_mode"] == "paste":
         tag = f"compose-{cid}"
-        later = []
+        later, checks_until = [], time.monotonic() + TYPED_DNS_SECONDS
         for i, email in enumerate(addresses):
             contact_id, created = create_contact(wid, email, {}, "manual", purpose="Business email sent from Compose",
                                                  source_detail=f"Typed in Compose by {user['full_name']}",
                                                  recipient_type="business", lawful_basis="legitimate_interest")
-            if created and i < TYPED_DNS_CHECKS:
+            if created and i < TYPED_DNS_CHECKS and time.monotonic() < checks_until:
                 validation.store_on_contact(contact_id, validation.check(email, wid, dns=True))
             elif created:
                 later.append(contact_id)

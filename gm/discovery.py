@@ -393,7 +393,7 @@ def review(job_id):
             flash("Say why you're adding these contacts, what kind of address they are, and your permission to email them.", "error")
             return redirect(url_for("discovery.run", job_id=job_id))
         tag = request.form.get("tag", "").strip()
-        added = 0
+        added, new_ids = 0, []
         for r in rows:
             cid, created = create_contact(wid, r["email"], {"company": r["company"], "website": f"https://{r['domain']}"},
                                           "discovery", source_url=r["source_url"],
@@ -403,9 +403,12 @@ def review(job_id):
                 added += 1
                 if tag:
                     apply_tags(wid, cid, [tag])
-                validation.store_on_contact(cid, validation.check(r["email"], wid, dns=True))
+                new_ids.append(cid)
             execute("UPDATE discovery_results SET status = ?, contact_id = ? WHERE id = ?",
                     ("added" if created else "existing", cid, r["id"]))
+        if new_ids:  # domains are checked in the background so this page answers straight away
+            jobs.enqueue("verify_contacts", {"ids": new_ids}, workspace_id=wid, user_id=current_user()["id"],
+                         total=len(new_ids))
         audit("discovery.added", detail=f"{added} contacts from run {job_id}")
         flash(f"Added {added} contacts. Each records the page it was published on.", "success")
     else:

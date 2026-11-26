@@ -194,4 +194,5 @@ def _retention(ctx):
     execute("DELETE FROM page_cache WHERE fetched_at < datetime('now', '-2 days')")
     execute("DELETE FROM user_sessions WHERE expires_at < datetime('now', '-30 days')")
     execute("DELETE FROM auth_codes WHERE expires_at < datetime('now', '-7 days')")
+    execute("PRAGMA optimize")  # refresh SQLite's statistics so lists and counts keep using the right indexes
     return {"note": "retention clean-up finished"}

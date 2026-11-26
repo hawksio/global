@@ -747,17 +747,18 @@ def _send_step(c, ws, provider, recipient, contact, step):
         if existing["status"] != "queued":
             _advance(c, recipient, step["step_no"], existing["status"] == "simulated")  # already sent earlier
         return existing["status"], None
-    result = provider.send(_payload(c, ws, contact, step, mid), key)
-    status = mailer.apply_result(mid, provider, result)
-    if status in ("accepted", "simulated"):
-        _advance(c, recipient, step["step_no"], status == "simulated")
-        add_event(ws["id"], contact["id"], "email_simulated" if status == "simulated" else "email_accepted",
-                  f"{'Simulated' if status == 'simulated' else 'Accepted by the sending service'}: {step['subject'][:120]}",
-                  campaign_id=c["id"], message_id=mid, simulated=status == "simulated")
-    elif status == "failed":
-        execute("UPDATE campaign_recipients SET status = 'stopped', stop_reason = ? WHERE id = ?",
-                (f"Send failed: {result.error}"[:200], recipient["id"]))
-        add_event(ws["id"], contact["id"], "email_failed", result.error[:300], campaign_id=c["id"], message_id=mid)
+    result = provider.send(_payload(c, ws, contact, step, mid), key)  # network: never inside a transaction
+    with transaction():  # everything about this email is saved in one short write
+        status = mailer.apply_result(mid, provider, result)
+        if status in ("accepted", "simulated"):
+            _advance(c, recipient, step["step_no"], status == "simulated")
+            add_event(ws["id"], contact["id"], "email_simulated" if status == "simulated" else "email_accepted",
+                      f"{'Simulated' if status == 'simulated' else 'Accepted by the sending service'}: {step['subject'][:120]}",
+                      campaign_id=c["id"], message_id=mid, simulated=status == "simulated")
+        elif status == "failed":
+            execute("UPDATE campaign_recipients SET status = 'stopped', stop_reason = ? WHERE id = ?",
+                    (f"Send failed: {result.error}"[:200], recipient["id"]))
+            add_event(ws["id"], contact["id"], "email_failed", result.error[:300], campaign_id=c["id"], message_id=mid)
     return status, result
 
 
@@ -774,7 +775,7 @@ def _precheck(c, ws, recipient):
     return (contact, None) if ok else (None, why)
 
 
-FIRST_BATCH_SECONDS = 6  # the Send button waits at most this long; the background sender does the rest
+FIRST_BATCH_SECONDS = 3  # the Send button waits at most this long; the background sender does the rest
 
 
 def process_campaign(c, ws, budget, max_seconds=None):

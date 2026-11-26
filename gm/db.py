@@ -576,9 +576,14 @@ def connect(path):
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 30000")
     try:
-        conn.execute("PRAGMA journal_mode = WAL")
+        if conn.execute("PRAGMA journal_mode = WAL").fetchone()[0].lower() == "wal":
+            # With WAL, NORMAL is still crash-safe (the database can't be corrupted) and saves a disk flush on every
+            # commit, which is most of the cost of a write on shared hosting.
+            conn.execute("PRAGMA synchronous = NORMAL")
     except sqlite3.OperationalError:
         pass  # some network filesystems refuse WAL; the default journal still works
+    conn.execute("PRAGMA temp_store = MEMORY")
+    conn.execute("PRAGMA cache_size = -16000")  # 16 MB page cache for big lists and counts
     return conn
 
 
